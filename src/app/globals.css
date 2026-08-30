@@ -76,8 +76,10 @@ input {
   pointer-events: none;
 }
 
-html[data-focus-mode="true"] .app-primary-navigation,
-html[data-focus-mode="true"] .app-brand-label {
+/* Focus mode gives the whole viewport to the staff and keyboard. The MIDI menu
+   goes with the header, but the connection is held by the provider and survives;
+   Exit Focus in the training toolbar brings the menu back. */
+html[data-focus-mode="true"] .app-nav {
   display: none;
 }
 
@@ -89,10 +91,6 @@ html[data-focus-mode="true"] .app-brand-label {
   .app-brand-label,
   .app-nav-link-label {
     display: none;
-  }
-
-  .focus-training-surface {
-    top: 3.25rem;
   }
 
   .home-page {
@@ -190,7 +188,7 @@ html[data-focus-mode="true"] .app-brand-label {
   }
 
   .responsive-piano-surface {
-    height: 6rem;
+    height: 7rem;
     min-width: 100% !important;
   }
 

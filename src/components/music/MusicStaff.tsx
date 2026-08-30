@@ -19,9 +19,14 @@ const CORRECT = "#2dd4bf";
 const INCORRECT = "#fb7185";
 const SHEET_PLAYED = "#64748b";
 const STREAM_PLAYED = "#94a3b8";
-const SLIDE_MS = 170;
+const SLIDE_MS = 300;
 // Half a quarter-note head, so the playhead centres on the head rather than its left edge.
 const HEAD_CENTER_PX = 6;
+// Five treble lines 10px apart, and VexFlow's default gap between a stave's y and
+// its top line. Three ledger lines either way plus a note head need 35px of
+// clearance, so a stream container shorter than 110px starts clipping F3 and E6.
+const STAVE_LINES_PX = 40;
+const SPACE_ABOVE_STAVE_PX = 41;
 
 interface MusicStaffProps {
   notes: TargetNote[];
@@ -87,8 +92,9 @@ export function MusicStaff({
   const [compactLandscape, setCompactLandscape] = useState(false);
 
   const geometry = useMemo(() => streamGeometry(width), [width]);
-  const staffHeight = compactLandscape ? 132 : 180;
-  const staveY = compactLandscape ? 22 : 28;
+  const staffHeight = compactLandscape ? 118 : 150;
+  // Centre the stave so both ledger directions get equal room.
+  const staveY = Math.round((staffHeight - STAVE_LINES_PX) / 2) - SPACE_ABOVE_STAVE_PX;
 
   useEffect(() => {
     readyRef.current = onReady;

@@ -293,7 +293,7 @@ export function ReflexTrainer() {
   }
 
   return (
-    <div className={focusMode ? "focus-training-surface reflex-training-layout fixed inset-x-0 bottom-0 top-16 z-40 space-y-4 overflow-auto bg-slate-950 px-3 py-4 sm:px-8 sm:py-6" : "reflex-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"}>
+    <div className={focusMode ? "focus-training-surface reflex-training-layout fixed inset-0 z-40 space-y-4 overflow-auto bg-slate-950 px-3 py-4 sm:px-8 sm:py-6" : "reflex-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"}>
       <div className="reflex-training-toolbar flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-teal-300">REFLEX</p>
