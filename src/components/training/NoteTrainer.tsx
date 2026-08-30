@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/keys";
 import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
-import { TREBLE_RANGES } from "@/core/music/notes";
+import { formatClef, resolveRange } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
 import { calculateWeakNoteStats, summarizeTraining } from "@/core/training/scoring";
 import { applyInputToTrial, createOpenTrial, type OpenTrial } from "@/core/training/session";
@@ -20,7 +20,7 @@ import { useFocusMode } from "@/hooks/useFocusMode";
 import { useMidi } from "@/hooks/useMidi";
 import { persistTrainingSession } from "@/lib/sessionPersistence";
 import { loadLocalPreferences } from "@/lib/preferences";
-import type { KeyName, TargetNote, TrebleRangePreset } from "@/types/music";
+import type { Clef, KeyName, TargetNote, RangePreset } from "@/types/music";
 import type {
   MelodicShape,
   NoteInputEvent,
@@ -36,6 +36,15 @@ type SaveStatus = "saving" | "pending" | "synced";
 // How far past the current note the stream stays generated, so the reader always
 // has something to look ahead to.
 const STREAM_LOOKAHEAD = 8;
+
+const RANGE_LABELS: Record<RangePreset, string> = {
+  staff: "Staff only",
+  "ledger-1": "Staff + 1 ledger line",
+  "ledger-2": "Staff + 2 ledger lines",
+  "ledger-3": "Staff + 3 ledger lines",
+  custom: "Custom MIDI range",
+};
+
 
 interface NoteTrainerProps {
   /** Both modes score identically; flash swaps the moving stream for one note at a time. */
@@ -77,6 +86,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const [attemptCount, setAttemptCount] = useState(0);
   const { focusMode, setFocusMode, toggleFocusMode } = useFocusMode();
   const [keyChoice, setKeyChoice] = useState<KeyName | "random">("C");
+  const [clefChoice, setClefChoice] = useState<Clef | "random">("treble");
   const label = mode === "flash" ? "Flash" : "Reflex";
   const startedAtRef = useRef("");
   const armedRef = useRef(false);
@@ -185,7 +195,13 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     if (configRef.current.soundEnabled) await initializeAudio();
     // Resolve a random choice now, so the session records the key it landed on.
     const keySignature = keyChoice === "random" ? randomKey() : keyChoice;
-    configRef.current = { ...configRef.current, keySignature };
+    const clef: Clef = clefChoice === "random" ? (Math.random() < 0.5 ? "treble" : "bass") : clefChoice;
+    // Presets are relative to whichever staff is in play, so the range follows the clef.
+    const range =
+      configRef.current.rangePreset === "custom"
+        ? { minMidi: configRef.current.minMidi, maxMidi: configRef.current.maxMidi }
+        : resolveRange(clef, configRef.current.rangePreset);
+    configRef.current = { ...configRef.current, keySignature, clef, ...range };
     setConfig(configRef.current);
     generatorRef.current = new NoteGenerator({
       minMidi: configRef.current.minMidi,
@@ -210,7 +226,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     phaseRef.current = "running";
     setPhase("running");
     extendStream(0);
-  }, [extendStream, initializeAudio, keyChoice]);
+  }, [clefChoice, extendStream, initializeAudio, keyChoice]);
 
   const markTargetReady = useCallback(() => {
     if (phaseRef.current !== "running" || !target || openTrialRef.current?.target.id === target.id) return;
@@ -247,7 +263,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
         <div className="mb-8">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-300">{label} trainer</p>
           <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">Configure your session</h1>
-          <p className="mt-3 text-slate-400">Treble clef · notes of the chosen key · Chrome Desktop</p>
+          <p className="mt-3 text-slate-400">Notes of the chosen key · Chrome Desktop</p>
           <p className="mt-1 text-xs text-slate-500">Computer keyboard: {computerKeyboardGuide}</p>
         </div>
         <Card className="grid gap-5 p-4 sm:p-6 md:grid-cols-2 md:gap-6">
@@ -256,17 +272,28 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
             <select
               value={config.rangePreset}
               onChange={(event) => {
-                const rangePreset = event.target.value as TrebleRangePreset;
-                const range = rangePreset === "custom" ? { minMidi: config.minMidi, maxMidi: config.maxMidi } : TREBLE_RANGES[rangePreset];
-                setConfig((current) => ({ ...current, rangePreset, ...range }));
+                const rangePreset = event.target.value as RangePreset;
+                setConfig((current) => ({ ...current, rangePreset }));
               }}
               className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
             >
-              <option value="staff">Staff only (E4–F5)</option>
-              <option value="ledger-1">Staff + 1 ledger (C4–A5)</option>
-              <option value="ledger-2">Staff + 2 ledgers (A3–C6)</option>
-              <option value="ledger-3">Staff + 3 ledgers (F3–E6)</option>
-              <option value="custom">Custom MIDI range</option>
+              {(Object.keys(RANGE_LABELS) as RangePreset[]).map((preset) => (
+                <option key={preset} value={preset}>
+                  {RANGE_LABELS[preset]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-2 text-sm text-slate-300">
+            <span>Clef</span>
+            <select
+              value={clefChoice}
+              onChange={(event) => setClefChoice(event.target.value as Clef | "random")}
+              className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
+            >
+              <option value="treble">Treble · right hand</option>
+              <option value="bass">Bass · left hand</option>
+              <option value="random">Random each session</option>
             </select>
           </label>
           <label className="space-y-2 text-sm text-slate-300">
@@ -348,7 +375,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       <div className="note-training-toolbar flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-teal-300">{label.toUpperCase()}</p>
-          <p className="text-xs text-slate-500">{formatKeyName(config.keySignature)} major · {describeKey(config.keySignature)}</p>
+          <p className="text-xs text-slate-500">{formatClef(config.clef)} · {formatKeyName(config.keySignature)} major · {describeKey(config.keySignature)}</p>
         </div>
         <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-900/70 p-2 text-center text-xs text-slate-300 sm:flex sm:items-center sm:gap-6 sm:bg-transparent sm:p-0 sm:text-sm">
           <span><span className="block text-slate-500 sm:inline">Notes </span>{trials.length} / {config.sessionLength === "endless" ? "∞" : config.sessionLength}</span>
@@ -372,6 +399,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
             currentIndex={streamIndex}
             mode={mode === "flash" ? "flash" : "stream"}
             keySignature={config.keySignature}
+            clef={config.clef}
             feedback={feedback}
             fill={focusMode}
             onReady={markTargetReady}

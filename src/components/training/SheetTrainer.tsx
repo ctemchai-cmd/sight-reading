@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/keys";
 import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
-import { TREBLE_RANGES } from "@/core/music/notes";
+import { formatClef, resolveRange } from "@/core/music/notes";
 import { createQuarterNoteScore } from "@/core/music/score";
 import { NoteGenerator } from "@/core/training/noteGenerator";
 import { summarizeTraining } from "@/core/training/scoring";
@@ -20,7 +20,7 @@ import { useFocusMode } from "@/hooks/useFocusMode";
 import { useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useMidi } from "@/hooks/useMidi";
 import { persistTrainingSession } from "@/lib/sessionPersistence";
-import type { KeyName, Score, TrebleRangePreset } from "@/types/music";
+import type { Clef, KeyName, Score, RangePreset } from "@/types/music";
 import type { MelodicShape, NoteInputEvent, TrainingSessionConfig, TrainingSessionRecord, TrainingSummary, TrainingTrial } from "@/types/training";
 
 type Phase = "configure" | "running" | "paused" | "complete";
@@ -32,11 +32,13 @@ const LINE_CHOICES = [2, 4, 5] as const;
 export function SheetTrainer() {
   const [phase, setPhase] = useState<Phase>("configure");
   const phaseRef = useRef<Phase>("configure");
-  const [rangePreset, setRangePreset] = useState<TrebleRangePreset>("ledger-1");
+  const [rangePreset, setRangePreset] = useState<RangePreset>("ledger-1");
   const [lines, setLines] = useState<number>(4);
   const [keyChoice, setKeyChoice] = useState<KeyName | "random">("C");
   const [keySignature, setKeySignature] = useState<KeyName>("C");
   const [melodicShape, setMelodicShape] = useState<MelodicShape>("random");
+  const [clefChoice, setClefChoice] = useState<Clef | "random">("treble");
+  const [clef, setClef] = useState<Clef>("treble");
   const [score, setScore] = useState<Score | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const indexRef = useRef(0);
@@ -51,7 +53,8 @@ export function SheetTrainer() {
   const armedRef = useRef(false);
   const { engine, initialize: initializeAudio, error: audioError } = useAudio();
   const { focusMode, setFocusMode, toggleFocusMode } = useFocusMode();
-  const range = rangePreset === "custom" ? TREBLE_RANGES["ledger-1"] : TREBLE_RANGES[rangePreset];
+  // Presets are relative to whichever staff is in play, so the range follows the clef.
+  const range = resolveRange(clef, rangePreset === "custom" ? "ledger-1" : rangePreset);
   const totalNotes = lines * NOTES_PER_LINE;
   const notes = useMemo(
     () => score?.measures.flatMap((measure) => measure.notes.map((note) => note.pitch)) ?? [],
@@ -65,7 +68,7 @@ export function SheetTrainer() {
 
   const config = useCallback((): TrainingSessionConfig => ({
     mode: "sheet",
-    clef: "treble",
+    clef,
     keySignature,
     melodicShape,
     rangePreset,
@@ -76,7 +79,7 @@ export function SheetTrainer() {
     midiSoundEnabled: false,
     computerKeyboardEnabled: true,
     nextNoteDelayMs: 0,
-  }), [keySignature, melodicShape, range, rangePreset, totalNotes]);
+  }), [clef, keySignature, melodicShape, range, rangePreset, totalNotes]);
 
   const finish = useCallback(async (completedTrials: TrainingTrial[]) => {
     phaseRef.current = "complete";
@@ -130,10 +133,13 @@ export function SheetTrainer() {
     await initializeAudio();
     // Resolve a random choice now, so the session records the key it landed on.
     const resolvedKey = keyChoice === "random" ? randomKey() : keyChoice;
+    const resolvedClef: Clef = clefChoice === "random" ? (Math.random() < 0.5 ? "treble" : "bass") : clefChoice;
     setKeySignature(resolvedKey);
-    const generator = new NoteGenerator({ ...range, keySignature: resolvedKey, melodicShape, adaptive: false, avoidImmediateRepeat: true });
+    setClef(resolvedClef);
+    const resolvedRange = resolveRange(resolvedClef, rangePreset === "custom" ? "ledger-1" : rangePreset);
+    const generator = new NoteGenerator({ ...resolvedRange, keySignature: resolvedKey, melodicShape, adaptive: false, avoidImmediateRepeat: true });
     const generated = generator.generateSequence(totalNotes);
-    setScore(createQuarterNoteScore(generated));
+    setScore(createQuarterNoteScore(generated, resolvedClef));
     trialsRef.current = [];
     setTrials([]);
     indexRef.current = 0;
@@ -161,11 +167,19 @@ export function SheetTrainer() {
         <Card className="mt-7 space-y-6 p-4 sm:mt-8 sm:p-6">
           <label className="block space-y-2 text-sm text-slate-300">
             <span>Note range</span>
-            <select value={rangePreset} onChange={(event) => setRangePreset(event.target.value as TrebleRangePreset)} className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white">
+            <select value={rangePreset} onChange={(event) => setRangePreset(event.target.value as RangePreset)} className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white">
               <option value="staff">Easy · staff only</option>
               <option value="ledger-1">Medium · one ledger line</option>
               <option value="ledger-2">Hard · two ledger lines</option>
               <option value="ledger-3">Advanced · three ledger lines</option>
+            </select>
+          </label>
+          <label className="block space-y-2 text-sm text-slate-300">
+            <span>Clef</span>
+            <select value={clefChoice} onChange={(event) => setClefChoice(event.target.value as Clef | "random")} className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white">
+              <option value="treble">Treble · right hand</option>
+              <option value="bass">Bass · left hand</option>
+              <option value="random">Random each session</option>
             </select>
           </label>
           <label className="block space-y-2 text-sm text-slate-300">
@@ -214,7 +228,7 @@ export function SheetTrainer() {
     >
       {!focusMode && (
       <div className="sheet-training-toolbar flex flex-wrap items-center justify-between gap-3">
-        <div><p className="text-sm font-semibold text-teal-300">SHEET READING</p><p className="text-xs text-slate-500">{formatKeyName(keySignature)} major · {describeKey(keySignature)}</p></div>
+        <div><p className="text-sm font-semibold text-teal-300">SHEET READING</p><p className="text-xs text-slate-500">{formatClef(clef)} · {formatKeyName(keySignature)} major · {describeKey(keySignature)}</p></div>
         <p className="order-3 w-full rounded-xl bg-slate-900/70 p-2 text-center text-sm text-slate-300 sm:order-none sm:w-auto sm:bg-transparent sm:p-0">Line {Math.floor(currentIndex / NOTES_PER_LINE) + 1} / {lines} · Note {currentIndex + 1} / {totalNotes} · First try {trials.length ? Math.round(trials.filter((trial) => trial.firstTryCorrect).length / trials.length * 100) : 100}%</p>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="ghost" onClick={toggleFocusMode}><Maximize2 className="size-4" /> Focus</Button>
@@ -225,7 +239,7 @@ export function SheetTrainer() {
       )}
       <Card className="sheet-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button></div>}
-        {lineNotes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={lineNotes} currentIndex={currentIndex - lineStart} mode="sheet" keySignature={keySignature} fill={focusMode} feedback={feedback} onReady={markReady} />}
+        {lineNotes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={lineNotes} currentIndex={currentIndex - lineStart} mode="sheet" keySignature={keySignature} clef={clef} fill={focusMode} feedback={feedback} onReady={markReady} />}
         <p className={`training-feedback mt-3 h-5 text-center text-sm font-semibold ${feedback === "incorrect" ? "text-rose-300" : "text-teal-300"}`} aria-live="polite">{feedback === "incorrect" ? "✕ Wrong note — stay on the current note" : feedback === "correct" ? "✓" : ""}</p>
       </Card>
       <div className="sheet-training-inputs">

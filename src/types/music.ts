@@ -51,7 +51,8 @@ export interface Score {
   measures: Measure[];
 }
 
-export type TrebleRangePreset = "staff" | "ledger-1" | "ledger-2" | "ledger-3" | "custom";
+/** The staff itself, plus that many ledger lines either side of it. */
+export type RangePreset = "staff" | "ledger-1" | "ledger-2" | "ledger-3" | "custom";
 
 export interface MidiRange {
   minMidi: number;

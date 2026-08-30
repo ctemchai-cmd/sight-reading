@@ -1,4 +1,4 @@
-import type { Clef, KeyName, MidiNumber, TargetNote, TrebleRangePreset } from "@/types/music";
+import type { Clef, KeyName, MidiNumber, TargetNote, RangePreset } from "@/types/music";
 
 export type InputSource = "touch" | "computer-keyboard" | "midi";
 export type TrainingMode = "reflex" | "flash" | "sheet";
@@ -66,7 +66,7 @@ export interface TrainingSessionConfig {
   /** Resolved for the session, so a random choice is still recorded as the key it landed on. */
   keySignature: KeyName;
   melodicShape: MelodicShape;
-  rangePreset: TrebleRangePreset;
+  rangePreset: RangePreset;
   minMidi: number;
   maxMidi: number;
   sessionLength: number | "endless";

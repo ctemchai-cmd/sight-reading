@@ -1,12 +1,13 @@
 import { spellInKey } from "@/core/music/keys";
 import type {
   Accidental,
+  Clef,
   KeyName,
   MidiRange,
   NoteLetter,
   NotatedPitch,
+  RangePreset,
   TargetNote,
-  TrebleRangePreset,
 } from "@/types/music";
 
 const LETTERS: NoteLetter[] = ["C", "D", "E", "F", "G", "A", "B"];
@@ -51,11 +52,29 @@ const FLAT_SPELLINGS: Array<[NoteLetter, Accidental]> = [
 /** A standard 61-key controller: C2 to C7, so the on-screen board matches the hardware. */
 export const STANDARD_KEYBOARD_RANGE: MidiRange = { minMidi: 36, maxMidi: 96 };
 
-export const TREBLE_RANGES: Record<Exclude<TrebleRangePreset, "custom">, MidiRange> = {
-  staff: { minMidi: 64, maxMidi: 77 },
-  "ledger-1": { minMidi: 60, maxMidi: 81 },
-  "ledger-2": { minMidi: 57, maxMidi: 84 },
-  "ledger-3": { minMidi: 53, maxMidi: 88 },
+/**
+ * Each preset is the staff itself plus that many ledger lines either side, so a
+ * bass preset asks the same of the reader as the treble one of the same name.
+ */
+export const CLEF_RANGES: Record<Clef, Record<Exclude<RangePreset, "custom">, MidiRange>> = {
+  treble: {
+    staff: { minMidi: 64, maxMidi: 77 }, // E4-F5
+    "ledger-1": { minMidi: 60, maxMidi: 81 }, // C4-A5
+    "ledger-2": { minMidi: 57, maxMidi: 84 }, // A3-C6
+    "ledger-3": { minMidi: 53, maxMidi: 88 }, // F3-E6
+  },
+  bass: {
+    staff: { minMidi: 43, maxMidi: 57 }, // G2-A3
+    "ledger-1": { minMidi: 40, maxMidi: 60 }, // E2-C4
+    "ledger-2": { minMidi: 36, maxMidi: 64 }, // C2-E4
+    "ledger-3": { minMidi: 33, maxMidi: 67 }, // A1-G4
+  },
+};
+
+/** The pitch sitting on the lowest line of each staff. */
+const BOTTOM_LINE: Record<Clef, NotatedPitch> = {
+  treble: { letter: "E", accidental: "natural", octave: 4 },
+  bass: { letter: "G", accidental: "natural", octave: 2 },
 };
 
 function assertMidi(midi: number): void {
@@ -114,22 +133,26 @@ function diatonicIndex(note: NotatedPitch): number {
   return note.octave * 7 + LETTERS.indexOf(note.letter);
 }
 
-export function getTrebleStaffPosition(note: NotatedPitch): number {
-  const bottomLine = diatonicIndex({ letter: "E", accidental: "natural", octave: 4 });
-  return diatonicIndex(note) - bottomLine;
+/** Steps above the staff's bottom line, counting lines and spaces alike. */
+export function getStaffPosition(clef: Clef, note: NotatedPitch): number {
+  return diatonicIndex(note) - diatonicIndex(BOTTOM_LINE[clef]);
 }
 
-export function getTrebleLedgerLineCount(note: NotatedPitch): number {
-  const position = getTrebleStaffPosition(note);
+export function getLedgerLineCount(clef: Clef, note: NotatedPitch): number {
+  const position = getStaffPosition(clef, note);
   if (position < 0) return Math.floor(Math.abs(position) / 2);
   if (position > 8) return Math.floor((position - 8) / 2);
   return 0;
 }
 
-export function resolveTrebleRange(preset: TrebleRangePreset, custom?: MidiRange): MidiRange {
+export function resolveRange(clef: Clef, preset: RangePreset, custom?: MidiRange): MidiRange {
   if (preset === "custom") {
     if (!custom) throw new Error("Custom range requires minMidi and maxMidi.");
     return custom;
   }
-  return TREBLE_RANGES[preset];
+  return CLEF_RANGES[clef][preset];
+}
+
+export function formatClef(clef: Clef): string {
+  return clef === "bass" ? "Bass" : "Treble";
 }

@@ -1,6 +1,6 @@
-import type { Measure, Score, TargetNote } from "@/types/music";
+import type { Clef, Measure, Score, TargetNote } from "@/types/music";
 
-export function createQuarterNoteScore(notes: TargetNote[], notesPerMeasure = 4): Score {
+export function createQuarterNoteScore(notes: TargetNote[], clef: Clef = "treble", notesPerMeasure = 4): Score {
   const measures: Measure[] = [];
   for (let index = 0; index < notes.length; index += notesPerMeasure) {
     measures.push({
@@ -12,5 +12,5 @@ export function createQuarterNoteScore(notes: TargetNote[], notesPerMeasure = 4)
       })),
     });
   }
-  return { clef: "treble", beatsPerMeasure: 4, beatValue: 4, measures };
+  return { clef, beatsPerMeasure: 4, beatValue: 4, measures };
 }

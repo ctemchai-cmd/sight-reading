@@ -1,6 +1,6 @@
 # Sight Reading Trainer
 
-A Chrome Desktop-first piano sight-reading trainer built with Next.js, VexFlow, Tone.js, Web MIDI, and Supabase. Training runs in a major key of your choosing, or a random one each session, with the sharps and flats read from the key signature rather than written on the notes.
+A Chrome Desktop-first piano sight-reading trainer built with Next.js, VexFlow, Tone.js, Web MIDI, and Supabase. Training runs on either clef and in a major key of your choosing, or a random one each session, with the sharps and flats read from the key signature rather than written on the notes.
 
 ## Deploy to Vercel
 

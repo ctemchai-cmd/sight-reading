@@ -11,8 +11,8 @@ import {
   Voice,
 } from "vexflow";
 import { isAccidentalImplied } from "@/core/music/keys";
-import { accidentalToVexFlow, notationToVexFlowKey } from "@/core/music/notes";
-import type { KeyName, TargetNote } from "@/types/music";
+import { accidentalToVexFlow, formatClef, notationToVexFlowKey } from "@/core/music/notes";
+import type { Clef, KeyName, TargetNote } from "@/types/music";
 
 // The notation surface remains paper-white in every app theme, so musical ink stays dark.
 const INK = "#0f172a";
@@ -45,6 +45,7 @@ interface MusicStaffProps {
   currentIndex?: number;
   mode?: "stream" | "flash" | "sheet";
   keySignature?: KeyName;
+  clef?: Clef;
   feedback?: "correct" | "incorrect" | null;
   onReady?: () => void;
   /** Stream only: take the container's height and scale the notation to match. */
@@ -76,9 +77,9 @@ function streamGeometry(width: number, flash: boolean, noteStartX: number): Stre
   };
 }
 
-function createVexNote(target: TargetNote, color: string, keySignature: KeyName): StaveNote {
+function createVexNote(target: TargetNote, color: string, keySignature: KeyName, clef: Clef): StaveNote {
   const note = new StaveNote({
-    clef: "treble",
+    clef,
     keys: [notationToVexFlowKey(target.notation)],
     duration: "q",
     autoStem: true,
@@ -99,6 +100,7 @@ export function MusicStaff({
   currentIndex = 0,
   mode = "stream",
   keySignature = "C",
+  clef = "treble",
   feedback,
   onReady,
   fill = false,
@@ -166,10 +168,10 @@ export function MusicStaff({
     context.scale(scale, scale);
     context.setFillStyle(INK);
     context.setStrokeStyle(INK);
-    const stave = new Stave(8, staveY, innerWidth - 16).addClef("treble").addKeySignature(keySignature);
+    const stave = new Stave(8, staveY, innerWidth - 16).addClef(clef).addKeySignature(keySignature);
     stave.setContext(context).draw();
     setNoteStartX(stave.getNoteStartX() * scale);
-  }, [innerWidth, keySignature, scale, staffHeight, staveY, streaming, width]);
+  }, [clef, innerWidth, keySignature, scale, staffHeight, staveY, streaming, width]);
 
   useEffect(() => {
     const layer = streamLayerRef.current;
@@ -200,7 +202,7 @@ export function MusicStaff({
               : feedback === "incorrect"
                 ? INCORRECT
                 : INK;
-      const vexNote = createVexNote(notes[index], color, keySignature);
+      const vexNote = createVexNote(notes[index], color, keySignature, clef);
       vexNote.setStave(stave).setContext(context);
       new TickContext()
         .addTickable(vexNote)
@@ -228,7 +230,7 @@ export function MusicStaff({
 
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
-  }, [currentIndex, feedback, geometry, innerWidth, keySignature, mode, notes, scale, staffHeight, staveY, streaming, width]);
+  }, [clef, currentIndex, feedback, geometry, innerWidth, keySignature, mode, notes, scale, staffHeight, staveY, streaming, width]);
 
   useEffect(() => {
     const layer = sheetLayerRef.current;
@@ -264,7 +266,7 @@ export function MusicStaff({
     // the first one crams four notes into whatever the signature left behind.
     const staves = Array.from({ length: measureCount }, (_, measureIndex) => {
       const stave = new Stave(0, 0, usableWidth);
-      if (measureIndex % measuresPerRow === 0) stave.addClef("treble").addKeySignature(keySignature);
+      if (measureIndex % measuresPerRow === 0) stave.addClef(clef).addKeySignature(keySignature);
       if (measureIndex === 0) stave.addTimeSignature("4/4");
       return stave.setContext(context);
     });
@@ -295,7 +297,7 @@ export function MusicStaff({
               : index < currentIndex
                 ? SHEET_PLAYED
                 : INK;
-          return createVexNote(target, color, keySignature);
+          return createVexNote(target, color, keySignature, clef);
         });
         const voice = new Voice({ numBeats: targets.length, beatValue: 4 }).addTickables(vexNotes);
         new Formatter().joinVoices([voice]).format([voice], Math.max(60, noteSpace - 14));
@@ -317,7 +319,7 @@ export function MusicStaff({
 
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
-  }, [compactLandscape, currentIndex, feedback, fill, keySignature, mode, notes, width]);
+  }, [clef, compactLandscape, currentIndex, feedback, fill, keySignature, mode, notes, width]);
 
   return (
     <div
@@ -329,7 +331,7 @@ export function MusicStaff({
       className={`music-staff relative w-full rounded-xl bg-white/95 ${mode === "sheet" ? "min-h-45 max-h-[55vh] overflow-y-auto overflow-x-hidden" : `overflow-hidden ${fill ? "h-full" : ""}`} ${className ?? ""}`}
       aria-label={
         streaming
-          ? `Treble-clef note ${currentIndex + 1}`
+          ? `${formatClef(clef)}-clef note ${currentIndex + 1}`
           : `Sheet music, note ${currentIndex + 1} of ${notes.length}`
       }
     >

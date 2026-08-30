@@ -33,7 +33,9 @@ These decisions override older or broader statements elsewhere in this document 
 * UI language is English for V1.
 * Generated notes follow a melodic shape rather than being drawn uniformly: steps, steps and thirds, leaps, or no shape at all. Reading is pattern recognition — an eye that has met a rising third a thousand times stops spelling it out — and uniform random notes never form those patterns. The shapes are also a difficulty ladder to climb. A line breaks off into a fresh phrase occasionally so it does not wander forever, and weak-note drills keep the unshaped picker, their pitches being a scattered set rather than a line.
 * The dashboard reports the practice habit as well as the scores — current streak, best streak, and the last seven days — because this skill is built by turning up often rather than by long sessions.
-* Treble clef only. Training runs in a major key chosen per session — any of the thirteen from C to six sharps or six flats, or random — and draws only notes of that key.
+* Treble and bass clef are both scored, chosen per session or left to land at random. A range preset means the staff plus that many ledger lines either side of it, so the same preset asks the same of the reader on either staff, and the virtual keyboard follows by centring on whichever hand is in play.
+* Grand staff — both clefs at once — remains future work. Alternating between them per session is the stepping stone.
+* Training runs in a major key chosen per session — any of the thirteen from C to six sharps or six flats, or random — and draws only notes of that key.
 * The key signature is drawn at the start of the staff and its accidentals are never repeated on the note heads. Reading the sharp or flat from the signature rather than from the note is the skill this trains: in G major a note on the top line is written F and must be played as F sharp.
 * Notes are spelled the way their key writes them, so G major reaches for F sharp and D flat major for G flat, both sounding the same key on the piano. This is why the domain model keeps written pitch spelling separate from sounding MIDI pitch, and why nothing outside `core/music/keys.ts` decides how a pitch is spelled.
 * Performance mode, native mobile applications, bass/grand staff, advanced rhythm, MusicXML, and full offline sync remain future work.
@@ -56,7 +58,7 @@ Implemented in the repository:
 
 * Next.js 16 App Router application with strict TypeScript, Tailwind CSS, 360 px responsive layouts, installable PWA metadata, production security headers, and a Vercel-compatible build.
 * Music domain types that keep written pitch spelling separate from sounding MIDI pitch.
-* Major key signatures from C to six sharps or six flats, key-aware spelling and scale membership, treble ranges, MIDI/note conversion, ledger classification, uniform generation, adaptive weighting, trial/attempt scoring, and first-attempt accuracy.
+* Major key signatures from C to six sharps or six flats, key-aware spelling and scale membership, treble and bass ranges, MIDI/note conversion, ledger classification, uniform generation, adaptive weighting, trial/attempt scoring, and first-attempt accuracy.
 * Reflex Trainer as a right-to-left note stream with a fixed playhead, generated lookahead, and 25/50/71/100/endless sessions, pause, focus mode, configurable delay, ledger presets, custom MIDI range, virtual piano, computer keyboard input, results, and weak-note replay.
 * Sheet Reading runs two, four, or five lines of four 4/4 measures — sixteen quarter notes each — but shows one line at a time, replacing it with the next once it is read. The notation scales up into whatever height is spare, bounded by the room a measure needs before its notes collide; four measures across a row is the real ceiling on how large it can draw. Compact landscape keeps its tuned size, having no spare height to give. A single system stays legible at full size rather than shrinking five onto a phone. Current-note highlighting, focus mode, and no advance on a wrong input all still apply, and the staff still scrolls when a narrow screen wraps one line onto several rows.
 * Responsive VexFlow 5 SVG notation that reflows sheet measures across rows on narrow screens, a piano-shaped Tone.js synth voice initialized by explicit user action, and a normalized input path.
@@ -68,7 +70,7 @@ Implemented in the repository:
 
 External setup still required before cloud features are live:
 
-* Create or select the Supabase project and apply every file in `supabase/migrations/` in filename order. `20260830120000_flash_mode.sql` widens the session mode constraint; until it runs, Flash sessions fail the check and are queued in IndexedDB instead of saving.
+* Create or select the Supabase project and apply every file in `supabase/migrations/` in filename order. `20260830120000_flash_mode.sql` widens the session mode constraint and `20260830180000_bass_clef.sql` widens the clef constraint; until each runs, sessions of that kind fail the check and are queued in IndexedDB instead of saving.
 * Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel for Production, Preview, and Development.
 * Disable public user sign-up in Supabase Authentication and create the approved user manually. Remove any existing users who should no longer have access.
 * Add each Vercel deployment domain and `/auth/callback` to the Supabase Auth URL configuration.
@@ -2000,11 +2002,6 @@ V1:
 
 ```txt
 Treble
-```
-
-Future:
-
-```txt
 Bass
 ```
 
@@ -2014,7 +2011,10 @@ Later:
 Grand Staff
 ```
 
-All generator and rendering APIs should accept clef as configuration even if treble is initially the only visible option.
+Staff geometry is derived from the pitch sitting on each staff's bottom line —
+E4 for treble, G2 for bass — rather than tabulated per clef, so a third clef
+needs one entry rather than a parallel set of helpers. All generator and
+rendering APIs accept clef as configuration.
 
 ---
 
