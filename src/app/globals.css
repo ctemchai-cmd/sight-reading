@@ -66,6 +66,16 @@ input {
   max-width: none;
 }
 
+/* A held key must stay a held key: `user-select` alone does not stop iOS raising
+   its callout menu on a long press, and the tap highlight flashes over the keys. */
+.responsive-piano-surface,
+.responsive-piano-surface * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .staff-playhead {
   position: absolute;
   top: 10%;

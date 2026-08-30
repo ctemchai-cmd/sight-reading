@@ -133,6 +133,7 @@ export function PianoKeyboard({
               onPointerDown={(event) => press(event, midi)}
               onPointerUp={(event) => release(event, midi)}
               onPointerCancel={(event) => release(event, midi)}
+              onContextMenu={(event) => event.preventDefault()}
             >
               {midi % 12 === 0 && (
                 <span className="absolute inset-x-0 bottom-2 text-xs">C{Math.floor(midi / 12) - 1}</span>
@@ -158,6 +159,7 @@ export function PianoKeyboard({
                 onPointerDown={(event) => press(event, midi)}
                 onPointerUp={(event) => release(event, midi)}
                 onPointerCancel={(event) => release(event, midi)}
+                onContextMenu={(event) => event.preventDefault()}
               />
             );
           })}
