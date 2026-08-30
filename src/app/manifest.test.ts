@@ -10,6 +10,10 @@ describe("PWA manifest", () => {
     expect(value.start_url).toBe("/");
     expect(value.scope).toBe("/");
     expect(value.display).toBe("standalone");
+    // Android bakes `orientation` into the minted package's activity. Declaring
+    // one made this the only installed app on the test device that would not
+    // launch from its home screen icon, so the device decides rotation.
+    expect(value.orientation).toBeUndefined();
     expect(value.icons).toEqual(expect.arrayContaining([
       expect.objectContaining({ sizes: "192x192", purpose: "any" }),
       expect.objectContaining({ sizes: "512x512", purpose: "any" }),
