@@ -10,10 +10,12 @@ import {
 } from "@/core/music/notes";
 import { cn } from "@/lib/utils";
 
-// Wide enough to stay a usable touch target. Thirty-six white keys will not fit
-// most screens at this width, which is the point: the board scrolls rather than
-// squeezing the keys down to slivers.
-const WHITE_KEY_MIN_PX = 34;
+// Keys are sized so about two octaves fill the width, whatever the screen: any
+// more and they read as slivers on a tablet. The rest of the board scrolls.
+const VISIBLE_WHITE_KEYS = 14;
+// Below this a key stops being a usable touch target, so narrow phones show
+// less than two octaves rather than shrinking further.
+const WHITE_KEY_MIN_PX = 32;
 // A black key covers a little over half the width of a white one.
 const BLACK_KEY_RATIO = 0.58;
 const WHITE_KEYS_PER_OCTAVE = 7;
@@ -40,7 +42,7 @@ export function PianoKeyboard({
   onNoteOff,
 }: PianoKeyboardProps) {
   const [pressed, setPressed] = useState<Set<number>>(new Set());
-  const [scrollable, setScrollable] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { whiteKeys, blackKeys } = useMemo(() => {
@@ -48,6 +50,10 @@ export function PianoKeyboard({
     const all = Array.from({ length: maxMidi - minMidi + 1 }, (_, index) => minMidi + index);
     return { whiteKeys: all.filter(isNaturalMidi), blackKeys: all.filter((midi) => !isNaturalMidi(midi)) };
   }, []);
+
+  const keyWidth = Math.max(WHITE_KEY_MIN_PX, Math.round(viewportWidth / VISIBLE_WHITE_KEYS));
+  const boardWidth = whiteKeys.length * keyWidth;
+  const scrollable = viewportWidth > 0 && boardWidth > viewportWidth + 1;
 
   // Black keys sit at a percentage of the box the white keys fill, so the
   // scroll anchor has to be a white key.
@@ -69,12 +75,12 @@ export function PianoKeyboard({
       scroller.scrollLeft = key.offsetLeft + key.offsetWidth / 2 - scroller.clientWidth / 2;
     });
     return () => cancelAnimationFrame(frame);
-  }, [anchorMidi]);
+  }, [anchorMidi, keyWidth]);
 
   useEffect(() => {
     const scroller = scrollRef.current;
     if (!scroller) return;
-    const observer = new ResizeObserver(() => setScrollable(scroller.scrollWidth > scroller.clientWidth + 1));
+    const observer = new ResizeObserver(() => setViewportWidth(scroller.clientWidth));
     observer.observe(scroller);
     return () => observer.disconnect();
   }, []);
@@ -82,7 +88,7 @@ export function PianoKeyboard({
   const scrollByOctave = (direction: 1 | -1) => {
     const scroller = scrollRef.current;
     if (!scroller) return;
-    const octave = (scroller.scrollWidth / whiteKeys.length) * WHITE_KEYS_PER_OCTAVE;
+    const octave = keyWidth * WHITE_KEYS_PER_OCTAVE;
     scroller.scrollBy({ left: direction * octave, behavior: "smooth" });
   };
 
@@ -112,14 +118,14 @@ export function PianoKeyboard({
         className="h-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-700 bg-slate-950"
         aria-label="Virtual piano"
       >
-        <div className="relative flex h-full w-full" style={{ minWidth: whiteKeys.length * WHITE_KEY_MIN_PX }}>
+        <div className="relative flex h-full w-full" style={{ minWidth: boardWidth }}>
           {whiteKeys.map((midi) => (
             <button
               key={midi}
               data-midi={midi}
               aria-label={formatNoteName(midiToNotatedPitch(midi))}
               disabled={disabled}
-              style={{ minWidth: WHITE_KEY_MIN_PX }}
+              style={{ minWidth: keyWidth }}
               className={cn(
                 "relative h-full flex-1 touch-none rounded-b-lg border border-slate-400 bg-slate-50 text-slate-500 shadow-inner transition-colors",
                 pressed.has(midi) && "bg-teal-200",

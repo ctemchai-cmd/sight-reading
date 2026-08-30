@@ -53,6 +53,11 @@ export function SheetTrainer() {
     [score],
   );
 
+  // Only the line being read is on screen; finishing it brings up the next one,
+  // which keeps a system at full size instead of shrinking five onto a phone.
+  const lineStart = Math.floor(currentIndex / NOTES_PER_LINE) * NOTES_PER_LINE;
+  const lineNotes = useMemo(() => notes.slice(lineStart, lineStart + NOTES_PER_LINE), [lineStart, notes]);
+
   const config = useCallback((): TrainingSessionConfig => ({
     mode: "sheet",
     clef: "treble",
@@ -159,7 +164,7 @@ export function SheetTrainer() {
               {LINE_CHOICES.map((count) => <option key={count} value={count}>{count} lines · {count * NOTES_PER_LINE} notes</option>)}
             </select>
           </label>
-          <p className="text-sm text-slate-400">4/4 · quarter notes · the staff scrolls to follow the cursor · wrong notes do not move it</p>
+          <p className="text-sm text-slate-400">4/4 · quarter notes · one line at a time, the next appears when you finish it · wrong notes do not move the cursor</p>
           <div className="flex justify-end"><Button className="w-full sm:w-auto" size="lg" onClick={() => void start()}><Play className="size-5" /> Start sheet</Button></div>
         </Card>
       </div>
@@ -179,7 +184,7 @@ export function SheetTrainer() {
       {!focusMode && (
       <div className="sheet-training-toolbar flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-sm font-semibold text-teal-300">SHEET READING</p><p className="text-xs text-slate-500">Quarter notes · 4/4</p></div>
-        <p className="order-3 w-full rounded-xl bg-slate-900/70 p-2 text-center text-sm text-slate-300 sm:order-none sm:w-auto sm:bg-transparent sm:p-0">Note {currentIndex + 1} / {totalNotes} · First try {trials.length ? Math.round(trials.filter((trial) => trial.firstTryCorrect).length / trials.length * 100) : 100}%</p>
+        <p className="order-3 w-full rounded-xl bg-slate-900/70 p-2 text-center text-sm text-slate-300 sm:order-none sm:w-auto sm:bg-transparent sm:p-0">Line {Math.floor(currentIndex / NOTES_PER_LINE) + 1} / {lines} · Note {currentIndex + 1} / {totalNotes} · First try {trials.length ? Math.round(trials.filter((trial) => trial.firstTryCorrect).length / trials.length * 100) : 100}%</p>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="ghost" onClick={toggleFocusMode}><Maximize2 className="size-4" /> Focus</Button>
           {phase === "paused" ? <Button size="sm" onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button> : <Button size="sm" variant="secondary" onClick={() => { phaseRef.current = "paused"; armedRef.current = false; openTrialRef.current = null; setPhase("paused"); }}><Pause className="size-4" /> Pause</Button>}
@@ -188,7 +193,7 @@ export function SheetTrainer() {
       )}
       <Card className="sheet-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button></div>}
-        {notes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={notes} currentIndex={currentIndex} mode="sheet" feedback={feedback} onReady={markReady} />}
+        {lineNotes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={lineNotes} currentIndex={currentIndex - lineStart} mode="sheet" feedback={feedback} onReady={markReady} />}
         <p className={`training-feedback mt-3 h-5 text-center text-sm font-semibold ${feedback === "incorrect" ? "text-rose-300" : "text-teal-300"}`} aria-live="polite">{feedback === "incorrect" ? "✕ Wrong note — stay on the current note" : feedback === "correct" ? "✓" : ""}</p>
       </Card>
       <div className="sheet-training-inputs">
