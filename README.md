@@ -12,15 +12,12 @@ A Chrome Desktop-first piano sight-reading trainer built with Next.js, VexFlow, 
    ```text
    NEXT_PUBLIC_SUPABASE_URL
    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-   PRIVATE_ALLOWED_EMAILS=owner@example.com
    ```
-
-   `PRIVATE_ALLOWED_EMAILS` is a server-only, comma-separated allowlist. Use the same email address as the manually created Supabase account.
 
 5. Add the deployed Vercel URL to Supabase Auth URL Configuration. Add `/auth/callback` as an allowed redirect path.
 6. Deploy or redeploy. Vercel supplies HTTPS, which is required by Web MIDI and installable PWA behavior.
 
-Training, dashboard, and settings routes fail closed when Supabase or the email allowlist is missing. Public sign-up and guest training are disabled. If authentication expires while a session is already open, its result is queued in IndexedDB and retried after the approved user signs in again.
+Training, dashboard, and settings routes fail closed when Supabase is missing or there is no valid non-anonymous Supabase session. The application has no public sign-up route and guest training is disabled, so access is managed by creating or deleting users in the Supabase dashboard. If authentication expires while a session is already open, its result is queued in IndexedDB and retried after the user signs in again.
 
 ## Verification
 

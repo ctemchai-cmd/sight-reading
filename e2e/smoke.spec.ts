@@ -11,8 +11,7 @@ test("requires private access before opening training", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Log in/i })).toBeDisabled();
 });
 
-test("public sign-up is disabled", async ({ page }) => {
-  await page.goto("/signup");
-  await expect(page).toHaveURL(/\/login\?error=invite-only/);
-  await expect(page.getByText(/Public sign-up is disabled/i)).toBeVisible();
+test("does not expose a public sign-up route", async ({ page }) => {
+  const response = await page.goto("/signup");
+  expect(response?.status()).toBe(404);
 });
