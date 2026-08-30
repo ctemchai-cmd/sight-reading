@@ -257,8 +257,8 @@ export function ReflexTrainer() {
   }
 
   return (
-    <div className={focusMode ? "fixed inset-0 z-50 space-y-4 overflow-auto bg-slate-950 px-3 py-4 sm:px-8 sm:py-6" : "mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className={focusMode ? "reflex-training-layout fixed inset-0 z-50 space-y-4 overflow-auto bg-slate-950 px-3 py-4 sm:px-8 sm:py-6" : "reflex-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"}>
+      <div className="reflex-training-toolbar flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-teal-300">REFLEX</p>
           <p className="text-xs text-slate-500">{computerKeyboardGuide}</p>
@@ -275,7 +275,7 @@ export function ReflexTrainer() {
         </div>
       </div>
 
-      <Card className="relative p-3 sm:p-5">
+      <Card className="reflex-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={resume}><Play className="size-4" /> Resume session</Button></div>}
         {target && <MusicStaff notes={[target]} feedback={feedback} onReady={markTargetReady} />}
         <div className="mt-3 h-6 text-center text-sm font-semibold" aria-live="polite">
@@ -284,15 +284,17 @@ export function ReflexTrainer() {
         </div>
       </Card>
 
-      <PianoKeyboard
-        minMidi={config.minMidi}
-        maxMidi={config.maxMidi}
-        disabled={phase !== "running"}
-        onNoteOn={(midiNote, velocity) => handleInput({ midi: midiNote, velocity, source: "touch", occurredAtMs: performance.now() })}
-        onNoteOff={(midiNote) => engine.current?.noteOff(midiNote)}
-      />
-      <MidiPanel status={midi.status} devices={midi.devices} selectedDeviceId={midi.selectedDeviceId} onConnect={() => void midi.connect()} onSelect={midi.selectDevice} />
-      {audioError && <p className="text-sm text-amber-300">{audioError}</p>}
+      <div className="reflex-training-inputs space-y-4">
+        <PianoKeyboard
+          minMidi={config.minMidi}
+          maxMidi={config.maxMidi}
+          disabled={phase !== "running"}
+          onNoteOn={(midiNote, velocity) => handleInput({ midi: midiNote, velocity, source: "touch", occurredAtMs: performance.now() })}
+          onNoteOff={(midiNote) => engine.current?.noteOff(midiNote)}
+        />
+        <MidiPanel status={midi.status} devices={midi.devices} selectedDeviceId={midi.selectedDeviceId} onConnect={() => void midi.connect()} onSelect={midi.selectDevice} />
+      </div>
+      {audioError && <p className="reflex-training-error text-sm text-amber-300">{audioError}</p>}
     </div>
   );
 }

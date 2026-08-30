@@ -65,10 +65,10 @@ export function MusicStaff({
     if (!container || notes.length === 0) return;
     container.replaceChildren();
     const measureCount = Math.ceil(notes.length / 4);
-    const measuresPerRow = width < 480 ? 1 : width < 900 ? 2 : 4;
-    const rowHeight = 150;
+    const measuresPerRow = width < 520 ? 1 : width < 680 ? 2 : 4;
+    const rowHeight = 130;
     const rowCount = Math.ceil(measureCount / measuresPerRow);
-    const height = mode === "single" ? 220 : rowCount * rowHeight + 20;
+    const height = mode === "single" ? 180 : rowCount * rowHeight + 10;
     const renderer = new Renderer(container, Renderer.Backends.SVG);
     renderer.resize(width, height);
     const context = renderer.getContext();
@@ -78,7 +78,7 @@ export function MusicStaff({
     context.setStrokeStyle(ink);
 
     if (mode === "single") {
-      const stave = new Stave(24, 45, width - 48);
+      const stave = new Stave(24, 28, width - 48);
       stave.addClef("treble").setContext(context).draw();
       const color = feedback === "correct" ? "#2dd4bf" : feedback === "incorrect" ? "#fb7185" : ink;
       const vexNote = createVexNote(notes[0], color);
@@ -94,7 +94,7 @@ export function MusicStaff({
         const rowIndex = Math.floor(measureIndex / measuresPerRow);
         const columnIndex = measureIndex % measuresPerRow;
         const startsRow = columnIndex === 0;
-        const stave = new Stave(14 + columnIndex * measureWidth, 28 + rowIndex * rowHeight, measureWidth);
+        const stave = new Stave(14 + columnIndex * measureWidth, 18 + rowIndex * rowHeight, measureWidth);
         if (startsRow) stave.addClef("treble");
         if (measureIndex === 0) stave.addTimeSignature("4/4");
         stave.setContext(context).draw();
@@ -123,7 +123,7 @@ export function MusicStaff({
   return (
     <div
       ref={containerRef}
-      className={`music-staff min-h-55 w-full overflow-hidden rounded-xl bg-white/95 ${className ?? ""}`}
+      className={`music-staff min-h-45 w-full overflow-hidden rounded-xl bg-white/95 ${className ?? ""}`}
       aria-label={mode === "single" ? "Current treble-clef note" : `Sheet music, note ${currentIndex + 1} of ${notes.length}`}
     />
   );

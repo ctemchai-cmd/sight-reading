@@ -8,6 +8,7 @@ These decisions override older or broader statements elsewhere in this document 
 * Primary hardware path: USB MIDI through the Web MIDI API.
 * Edge Chromium and Bluetooth MIDI are best-effort. Safari and mobile Web MIDI are not V1 release blockers, but every page must remain readable and operable at a 360 px mobile viewport without document-level horizontal overflow.
 * Responsive mobile layout includes compact navigation, stacked cards and controls, reflowed sheet-music measures, a horizontally scrollable touch piano, responsive dashboard charts, and a wrapped pitch heatmap. Chrome Desktop + USB MIDI remains the formally supported training path.
+* Mobile landscape at 800 × 360 is an explicit layout acceptance target: the document and virtual piano must fit the viewport width, Reflex uses a two-column staff/input workspace, and Sheet Reading uses a single four-measure row whenever space permits.
 * Bluetooth devices are supported when the operating system exposes them to Chrome as a Web MIDI input. V1 will not implement a separate Web Bluetooth/BLE-MIDI protocol stack.
 * V1 remains a complete product slice: Reflex, Sheet Reading, virtual piano, computer keyboard, MIDI, audio, adaptive practice, private Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
 * V1 is a private application. `/train`, `/dashboard`, and `/settings` require a valid non-anonymous Supabase session. Access is granted or revoked by creating or deleting users in the Supabase dashboard; no separate application allowlist is required.
@@ -45,7 +46,7 @@ Implemented in the repository:
 * IndexedDB pending cloud-save queue without a guest-mode bypass.
 * Private Supabase email/password Auth, protected application routes, reproducible SQL migration, RLS, transactional session RPC, aggregate per-note statistics, and retry-safe session IDs.
 * Dashboard metrics, response-time trend, weakest notes, and pitch heatmap.
-* Unit/component tests, desktop and mobile-Chrome Playwright smoke tests with horizontal-overflow assertions, ESLint, strict typecheck, and successful Next.js production build.
+* Unit/component tests, desktop, 360 px portrait, and 800 × 360 landscape Chrome Playwright smoke tests with horizontal-overflow assertions, ESLint, strict typecheck, and successful Next.js production build.
 
 External setup still required before cloud features are live:
 

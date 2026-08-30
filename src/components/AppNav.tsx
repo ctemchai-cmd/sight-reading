@@ -17,7 +17,7 @@ export function AppNav() {
 
   return (
     <header className="border-b border-slate-800/80 bg-slate-950/85 backdrop-blur">
-      <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-3 sm:px-6" aria-label="Main navigation">
+      <nav className="app-nav-bar mx-auto flex h-16 max-w-7xl items-center justify-between px-3 sm:px-6" aria-label="Main navigation">
         <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-white">
           <span className="grid size-9 place-items-center rounded-xl bg-teal-400 text-slate-950">SR</span>
           <span className="hidden sm:inline">Sight Reading Trainer</span>

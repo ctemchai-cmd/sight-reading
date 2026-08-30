@@ -42,8 +42,8 @@ export function PianoKeyboard({ minMidi, maxMidi, disabled, onNoteOn, onNoteOff 
   return (
     <div className="select-none overflow-x-auto rounded-xl overscroll-x-contain" aria-label="Virtual piano">
       <div
-        className="relative flex h-40 w-full touch-pan-x overflow-hidden rounded-xl border border-slate-700 bg-slate-950 p-1 sm:h-48"
-        style={{ minWidth: `${Math.max(320, whiteKeys.length * 42)}px` }}
+        className="responsive-piano-surface relative flex h-40 w-full touch-pan-x overflow-hidden rounded-xl border border-slate-700 bg-slate-950 p-1 sm:h-48"
+        style={{ minWidth: `${Math.max(320, whiteKeys.length * 30)}px` }}
       >
         {whiteKeys.map((midi) => (
           <button
@@ -51,7 +51,7 @@ export function PianoKeyboard({ minMidi, maxMidi, disabled, onNoteOn, onNoteOff 
             aria-label={formatNoteName(midiToNotatedPitch(midi))}
             disabled={disabled}
             className={cn(
-              "relative h-full min-w-10 flex-1 touch-none rounded-b-lg border border-slate-400 bg-slate-50 text-slate-500 shadow-inner transition-colors",
+              "responsive-piano-key relative h-full min-w-7 flex-1 touch-none rounded-b-lg border border-slate-400 bg-slate-50 text-slate-500 shadow-inner transition-colors lg:min-w-10",
               pressed.has(midi) && "bg-teal-200",
             )}
             onPointerDown={(event) => press(event, midi)}
