@@ -7,13 +7,14 @@ These decisions override older or broader statements elsewhere in this document 
 * Primary supported platform: current Google Chrome desktop on macOS and Windows.
 * Primary hardware path: USB MIDI through the Web MIDI API.
 * Edge Chromium and Bluetooth MIDI are best-effort. Safari and mobile Web MIDI are not V1 release blockers, but every page must remain readable and operable at a 360 px mobile viewport without document-level horizontal overflow.
-* Responsive mobile layout includes compact navigation, stacked cards and controls, reflowed sheet-music measures, a horizontally scrollable touch piano, responsive dashboard charts, and a wrapped pitch heatmap. Chrome Desktop + USB MIDI remains the formally supported training path.
+* The virtual piano is a full standard 61-key board, C2 to C7, scrolled to centre on the range being trained. Its keys hold `touch-action: none` so a press is never mistaken for a pan — a pan that fired a note would score a wrong answer — so scrolling gets its own octave controls at the edges.
+* Responsive mobile layout includes compact navigation, stacked cards and controls, reflowed sheet-music measures, responsive dashboard charts, and a wrapped pitch heatmap. Chrome Desktop + USB MIDI remains the formally supported training path.
 * Mobile landscape at 800 × 360 is an explicit layout acceptance target: training uses a full-width vertical stack with notation on top and the virtual piano below. Sheet Reading uses a single four-measure row whenever space permits.
 * MIDI permission, status, and device selection live in a persistent top-navigation menu rather than inside the training canvas. The MIDI connection survives client-side navigation between training modes.
 * Focus Mode is available in both Reflex and Sheet Reading. It hides the application header outright, MIDI menu included, and the training toolbar with it, so only the notation and the virtual piano remain. This reverses the earlier decision to keep a compact header for MIDI access: the connection is owned by the layout-level provider and survives, and leaving focus brings the menu, the session counters, and pause back.
 * The only control inside Focus Mode is a small icon-only Exit Focus button overlaying the top-right of the notation, positioned so it costs no layout space. Correct and incorrect verdicts stay legible through note colour, and the verdict text is kept for screen readers only.
 * Reflex notation scales up to fill the height Focus Mode frees, to a ceiling beyond which it reads as stretched against the unchanged horizontal spacing. Leftover height goes to the virtual piano. Sheet Reading keeps its natural notation size for now.
-* Reflex presents a continuous note stream rather than one note swapped in place. Reading runs left to right, so notes travel right to left: upcoming notes enter at the right edge, the armed note sits under a fixed playhead about a quarter of the way across the staff, and answered notes fade out past the clef. Four to six notes stay visible ahead depending on staff width. The clef and staff lines never move.
+* Flash and Reflex are the two single-target modes and score identically; only the presentation differs. Flash shows one centred note that is replaced the moment it is answered. Reflex presents a continuous note stream rather than one note swapped in place. Reading runs left to right, so notes travel right to left: upcoming notes enter at the right edge, the armed note sits under a fixed playhead about a quarter of the way across the staff, and answered notes fade out past the clef. Four to six notes stay visible ahead depending on staff width. The clef and staff lines never move.
 * The stream is still self-paced: it advances only on a correct input, never on a clock. Tempo-driven continuous reading remains Performance mode and stays out of V1.
 * Bluetooth devices are supported when the operating system exposes them to Chrome as a Web MIDI input. V1 will not implement a separate Web Bluetooth/BLE-MIDI protocol stack.
 * V1 remains a complete product slice: Reflex, Sheet Reading, virtual piano, computer keyboard, MIDI, audio, adaptive practice, private Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
@@ -23,7 +24,10 @@ These decisions override older or broader statements elsewhere in this document 
 * IndexedDB is used only as a pending cloud-save queue if authentication or Supabase connectivity is interrupted after a private training session has already started. It is not a guest-history store.
 * Vercel is the primary runtime and deployment target. Local execution is for development verification only; production configuration, routing, security headers, and environment variables must work on Vercel.
 * PWA V1 is installable in standalone landscape mode but does not promise offline training or a service worker cache. The manifest uses stable ID `/train` for compatibility with earlier installs, public launch URL `/`, full scope `/`, and both general and maskable 192/512 launch icons.
-* The built-in reference tone is a percussive, filter-enveloped synth voice: bright at the strike, mellowing as it rings, and decaying to silence rather than sustaining, so it reads as a struck string instead of an organ. It is still a synth. Sampled piano through Tone.Sampler remains the intended upgrade and waits on a sample set whose licence permits this use.
+* Audio is a sampled piano through Tone.Sampler, loading one recording every minor third from `public/audio/piano/` and letting Tone repitch between them; the full chromatic set is stereo and would decode to tens of megabytes on a phone. Samples preload when a trainer mounts, so the audio context start is the only thing a key press waits on.
+* Tone's default 100 ms scheduling lookahead is switched off. Nothing in this application is sequenced — every note is triggered live by a key press — so that budget is only input lag.
+* Recorded notes ring far longer than the practice tempo, so each is cut to a short duration with a quick release rather than being left to pile up.
+* A percussive filter-enveloped synth voice remains as the fallback when the sample set cannot be loaded, so training is never silent.
 * App sound stays off by default for MIDI input, because a real keyboard already makes its own sound. The tone exists for the virtual piano and the computer keyboard.
 * UI language is English for V1.
 * Treble clef and natural notes are the only scored notation in V1. The domain model must still preserve written pitch spelling separately from sounding MIDI pitch.
@@ -49,7 +53,7 @@ Implemented in the repository:
 * Music domain types that keep written pitch spelling separate from sounding MIDI pitch.
 * Treble natural-note ranges, MIDI/note conversion, ledger classification, uniform generation, adaptive weighting, trial/attempt scoring, and first-attempt accuracy.
 * Reflex Trainer as a right-to-left note stream with a fixed playhead, generated lookahead, and 25/50/71/100/endless sessions, pause, focus mode, configurable delay, ledger presets, custom MIDI range, virtual piano, computer keyboard input, results, and weak-note replay.
-* Sheet Reading with four 4/4 measures, sixteen quarter notes, current-note highlighting, focus mode, and no advance on a wrong input.
+* Sheet Reading runs two, four, or five lines of four 4/4 measures — sixteen quarter notes each — with current-note highlighting, focus mode, a staff that scrolls to keep the cursor's line in view, and no advance on a wrong input.
 * Responsive VexFlow 5 SVG notation that reflows sheet measures across rows on narrow screens, a piano-shaped Tone.js synth voice initialized by explicit user action, and a normalized input path.
 * Persistent navigation-level Web MIDI permission flow, device selection, connection state handling, Note On/Off parsing, velocity-zero Note Off, channel normalization, and reconnect-safe UI shared by every trainer.
 * IndexedDB pending cloud-save queue without a guest-mode bypass.
@@ -59,7 +63,7 @@ Implemented in the repository:
 
 External setup still required before cloud features are live:
 
-* Create or select the Supabase project and apply `supabase/migrations/20260830000000_initial.sql`.
+* Create or select the Supabase project and apply every file in `supabase/migrations/` in filename order. `20260830120000_flash_mode.sql` widens the session mode constraint; until it runs, Flash sessions fail the check and are queued in IndexedDB instead of saving.
 * Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel for Production, Preview, and Development.
 * Disable public user sign-up in Supabase Authentication and create the approved user manually. Remove any existing users who should no longer have access.
 * Add each Vercel deployment domain and `/auth/callback` to the Supabase Auth URL configuration.

@@ -1,9 +1,10 @@
-import { ArrowRight, Focus, Music, TimerReset } from "lucide-react";
+import { ArrowRight, Focus, Music, TimerReset, Zap } from "lucide-react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 
 const modes = [
-  { href: "/train/reflex", icon: TimerReset, title: "Reflex", description: "One note at a time. Build immediate recognition, speed, and first-try accuracy.", available: true },
+  { href: "/train/flash", icon: Zap, title: "Flash", description: "One note, answered, gone. Pure recognition with nothing to read ahead to.", available: true },
+  { href: "/train/reflex", icon: TimerReset, title: "Reflex", description: "A moving stream of notes. Trains the eye to run ahead of the hands.", available: true },
   { href: "/train/sheet", icon: Music, title: "Sheet Reading", description: "Read four measures ahead while the cursor tracks the expected note.", available: true },
   { href: "#", icon: Focus, title: "Performance", description: "Continuous tempo-based reading without stopping.", available: false },
 ];

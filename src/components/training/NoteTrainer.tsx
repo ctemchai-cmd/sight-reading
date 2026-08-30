@@ -34,6 +34,11 @@ type SaveStatus = "saving" | "pending" | "synced";
 // has something to look ahead to.
 const STREAM_LOOKAHEAD = 8;
 
+interface NoteTrainerProps {
+  /** Both modes score identically; flash swaps the moving stream for one note at a time. */
+  mode: "reflex" | "flash";
+}
+
 const DEFAULT_CONFIG: TrainingSessionConfig = {
   mode: "reflex",
   clef: "treble",
@@ -48,10 +53,10 @@ const DEFAULT_CONFIG: TrainingSessionConfig = {
   nextNoteDelayMs: 150,
 };
 
-export function ReflexTrainer() {
+export function NoteTrainer({ mode }: NoteTrainerProps) {
   const [phase, setPhase] = useState<Phase>("configure");
   const phaseRef = useRef<Phase>("configure");
-  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<TrainingSessionConfig>({ ...DEFAULT_CONFIG, mode });
   const configRef = useRef(config);
   const [stream, setStream] = useState<TargetNote[]>([]);
   const streamRef = useRef<TargetNote[]>([]);
@@ -65,7 +70,8 @@ export function ReflexTrainer() {
   const [summary, setSummary] = useState<TrainingSummary | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saving");
   const [attemptCount, setAttemptCount] = useState(0);
-  const { focusMode, toggleFocusMode } = useFocusMode();
+  const { focusMode, setFocusMode, toggleFocusMode } = useFocusMode();
+  const label = mode === "flash" ? "Flash" : "Reflex";
   const startedAtRef = useRef("");
   const armedRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,13 +102,14 @@ export function ReflexTrainer() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     phaseRef.current = "complete";
     setPhase("complete");
+    setFocusMode(false);
     armedRef.current = false;
     const nextSummary = summarizeTraining(completedTrials);
     setSummary(nextSummary);
     setSaveStatus("saving");
     const session: TrainingSessionRecord = {
       id: crypto.randomUUID(),
-      mode: "reflex",
+      mode,
       config: configRef.current,
       startedAt: startedAtRef.current,
       completedAt: new Date().toISOString(),
@@ -113,7 +120,7 @@ export function ReflexTrainer() {
     };
     const status = await persistTrainingSession(session);
     setSaveStatus(status);
-  }, []);
+  }, [mode, setFocusMode]);
 
   const extendStream = useCallback((throughIndex: number) => {
     const generator = generatorRef.current;
@@ -225,7 +232,7 @@ export function ReflexTrainer() {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         <div className="mb-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-300">Reflex trainer</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-300">{label} trainer</p>
           <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">Configure your session</h1>
           <p className="mt-3 text-slate-400">Treble clef · natural notes · Chrome Desktop</p>
         </div>
@@ -290,12 +297,12 @@ export function ReflexTrainer() {
     <FocusSurface
       active={focusMode}
       onExit={toggleFocusMode}
-      className="reflex-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"
+      className="note-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"
     >
       {!focusMode && (
-      <div className="reflex-training-toolbar flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="note-training-toolbar flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-sm font-semibold text-teal-300">REFLEX</p>
+          <p className="text-sm font-semibold text-teal-300">{label.toUpperCase()}</p>
           <p className="text-xs text-slate-500">{computerKeyboardGuide}</p>
         </div>
         <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-900/70 p-2 text-center text-xs text-slate-300 sm:flex sm:items-center sm:gap-6 sm:bg-transparent sm:p-0 sm:text-sm">
@@ -311,10 +318,17 @@ export function ReflexTrainer() {
       </div>
       )}
 
-      <Card className="reflex-training-staff relative p-3 sm:p-5">
+      <Card className="note-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={resume}><Play className="size-4" /> Resume session</Button></div>}
         {stream.length > 0 && (
-          <MusicStaff notes={stream} currentIndex={streamIndex} feedback={feedback} fill={focusMode} onReady={markTargetReady} />
+          <MusicStaff
+            notes={stream}
+            currentIndex={streamIndex}
+            mode={mode === "flash" ? "flash" : "stream"}
+            feedback={feedback}
+            fill={focusMode}
+            onReady={markTargetReady}
+          />
         )}
         <div className="training-feedback mt-3 h-6 text-center text-sm font-semibold" aria-live="polite">
           {feedback === "correct" && <span className="text-teal-300">✓ Correct</span>}
@@ -322,16 +336,16 @@ export function ReflexTrainer() {
         </div>
       </Card>
 
-      <div className="reflex-training-inputs">
+      <div className="note-training-inputs">
         <PianoKeyboard
-          minMidi={config.minMidi}
-          maxMidi={config.maxMidi}
+          trainingMinMidi={config.minMidi}
+          trainingMaxMidi={config.maxMidi}
           disabled={phase !== "running"}
           onNoteOn={(midiNote, velocity) => handleInput({ midi: midiNote, velocity, source: "touch", occurredAtMs: performance.now() })}
           onNoteOff={(midiNote) => engine.current?.noteOff(midiNote)}
         />
       </div>
-      {audioError && <p className="reflex-training-error text-sm text-amber-300">{audioError}</p>}
+      {audioError && <p className="note-training-error text-sm text-amber-300">{audioError}</p>}
     </FocusSurface>
   );
 }

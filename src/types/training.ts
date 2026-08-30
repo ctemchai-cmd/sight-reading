@@ -1,7 +1,7 @@
 import type { Clef, MidiNumber, TargetNote, TrebleRangePreset } from "@/types/music";
 
 export type InputSource = "touch" | "computer-keyboard" | "midi";
-export type TrainingMode = "reflex" | "sheet";
+export type TrainingMode = "reflex" | "flash" | "sheet";
 export type SessionEndReason = "target-reached" | "user-stopped";
 
 export interface NoteInputEvent {

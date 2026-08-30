@@ -19,6 +19,11 @@ export function useAudio() {
     }
   }, []);
 
+  useEffect(() => {
+    engineRef.current ??= new ToneAudioEngine();
+    engineRef.current.preload();
+  }, []);
+
   useEffect(() => () => engineRef.current?.stopAll(), []);
 
   return { engine: engineRef, ready, error, initialize };

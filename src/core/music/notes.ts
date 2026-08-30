@@ -46,6 +46,9 @@ const FLAT_SPELLINGS: Array<[NoteLetter, Accidental]> = [
   ["B", "natural"],
 ];
 
+/** A standard 61-key controller: C2 to C7, so the on-screen board matches the hardware. */
+export const STANDARD_KEYBOARD_RANGE: MidiRange = { minMidi: 36, maxMidi: 96 };
+
 export const TREBLE_RANGES: Record<Exclude<TrebleRangePreset, "custom">, MidiRange> = {
   staff: { minMidi: 64, maxMidi: 77 },
   "ledger-1": { minMidi: 60, maxMidi: 81 },

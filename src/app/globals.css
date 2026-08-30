@@ -106,7 +106,7 @@ html[data-focus-mode="true"] .app-nav {
 }
 
 /* The stream scales into whatever height is left; sheet music keeps its own. */
-.focus-training-surface .reflex-training-staff {
+.focus-training-surface .note-training-staff {
   flex: 1 1 auto;
   min-height: 0;
   max-height: 21rem;
@@ -127,7 +127,7 @@ html[data-focus-mode="true"] .app-nav {
 /* Leftover height goes to the keys rather than to empty margin. The explicit
    cross-axis sizing overrides the landscape grid rules, whose `align-self: start`
    collapses the keyboard to its scroll container's zero min-content width. */
-.focus-training-surface .reflex-training-inputs,
+.focus-training-surface .note-training-inputs,
 .focus-training-surface .sheet-training-inputs {
   display: flex;
   flex: 1 1 auto;
@@ -137,7 +137,7 @@ html[data-focus-mode="true"] .app-nav {
   max-height: 20rem;
 }
 
-.focus-training-surface .reflex-training-inputs > *,
+.focus-training-surface .note-training-inputs > *,
 .focus-training-surface .sheet-training-inputs > * {
   flex: 1 1 auto;
   min-width: 0;
@@ -265,14 +265,9 @@ html[data-focus-mode="true"] .app-nav {
 
   .responsive-piano-surface {
     height: 7rem;
-    min-width: 100% !important;
   }
 
-  .responsive-piano-key {
-    min-width: 0;
-  }
-
-  .reflex-training-layout {
+  .note-training-layout {
     display: grid;
     grid-template-areas:
       "toolbar"
@@ -285,13 +280,13 @@ html[data-focus-mode="true"] .app-nav {
     padding-bottom: 0.25rem;
   }
 
-  .reflex-training-layout > *,
+  .note-training-layout > *,
   .sheet-training-layout > * {
     margin-block-start: 0 !important;
     margin-block-end: 0 !important;
   }
 
-  .reflex-training-toolbar {
+  .note-training-toolbar {
     grid-area: toolbar;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
@@ -299,23 +294,23 @@ html[data-focus-mode="true"] .app-nav {
     gap: 0.75rem;
   }
 
-  .reflex-training-staff {
+  .note-training-staff {
     grid-area: staff;
     align-self: stretch;
     padding: 0.375rem !important;
   }
 
-  .reflex-training-inputs {
+  .note-training-inputs {
     grid-area: inputs;
     align-self: start;
   }
 
-  .reflex-training-inputs > * {
+  .note-training-inputs > * {
     margin-block-start: 0 !important;
     margin-block-end: 0 !important;
   }
 
-  .reflex-training-error {
+  .note-training-error {
     grid-area: error;
   }
 

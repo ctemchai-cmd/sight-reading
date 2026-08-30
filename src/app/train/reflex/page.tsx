@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { ReflexTrainer } from "@/components/training/ReflexTrainer";
+import { NoteTrainer } from "@/components/training/NoteTrainer";
 
 export const metadata: Metadata = { title: "Reflex Trainer" };
 
 export default function ReflexPage() {
-  return <ReflexTrainer />;
+  return <NoteTrainer mode="reflex" />;
 }

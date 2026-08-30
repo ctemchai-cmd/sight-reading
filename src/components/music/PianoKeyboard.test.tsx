@@ -6,7 +6,7 @@ describe("PianoKeyboard", () => {
   it("normalizes a pointer press to the exact MIDI key", () => {
     const on = vi.fn();
     const off = vi.fn();
-    render(<PianoKeyboard minMidi={60} maxMidi={64} onNoteOn={on} onNoteOff={off} />);
+    render(<PianoKeyboard trainingMinMidi={60} trainingMaxMidi={64} onNoteOn={on} onNoteOff={off} />);
     const middleC = screen.getByRole("button", { name: "C4" });
     middleC.setPointerCapture = vi.fn();
     fireEvent.pointerDown(middleC, { pointerId: 1 });

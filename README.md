@@ -5,7 +5,7 @@ A Chrome Desktop-first piano sight-reading trainer built with Next.js, VexFlow, 
 ## Deploy to Vercel
 
 1. Import this repository into Vercel as a Next.js project.
-2. Create a Supabase project and run the SQL migration in `supabase/migrations/20260830000000_initial.sql`.
+2. Create a Supabase project and run every file in `supabase/migrations/` in filename order, in the Supabase SQL editor. They are plain SQL and are applied by hand; there is no migration runner wired up.
 3. In Supabase Authentication, disable public user sign-up and create the approved user manually.
 4. Add these Production, Preview, and Development environment variables in Vercel:
 
@@ -22,6 +22,18 @@ Training, dashboard, and settings routes fail closed when Supabase is missing or
 ### Refresh an existing PWA installation
 
 The manifest keeps the previous `/train` app identity but now launches at `/` with scope `/`. After deploying this update, close the installed app and restart Chrome so it refreshes the manifest. Check `about://web-app-internals/` for `manifest_id` and `start_url`. If the operating-system icon still does not launch, remove the old installed app from Chrome and install it again from the production URL; an old OS shortcut can remain stale even when Chrome's “Open in app” action works.
+
+## Piano samples
+
+`public/audio/piano/` holds the note recordings the trainer plays. The audio
+engine loads one sample every minor third and lets Tone repitch between them,
+which keeps the decoded buffers small enough for a phone, and it preloads them
+when a trainer mounts so the first key press is not the thing that waits.
+
+If the folder is missing the app falls back to a synth voice rather than
+falling silent. Replacing the set means dropping in files named for their pitch
+with flats spelled `b` — `Eb4.mp3` — covering at least every minor third from
+C2 to C7. Only use a set whose licence permits this project's use.
 
 ## Verification
 

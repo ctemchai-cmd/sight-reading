@@ -34,7 +34,7 @@ const MAX_FILL_SCALE = 2.2;
 interface MusicStaffProps {
   notes: TargetNote[];
   currentIndex?: number;
-  mode?: "stream" | "sheet";
+  mode?: "stream" | "flash" | "sheet";
   feedback?: "correct" | "incorrect" | null;
   onReady?: () => void;
   /** Stream only: take the container's height and scale the notation to match. */
@@ -52,8 +52,10 @@ interface StreamGeometry {
 /**
  * Reading runs left to right, so the note stream travels right to left: upcoming
  * notes enter from the right edge and the answered ones exit past the clef.
+ * Flash mode is the degenerate case — no lookahead, no history, one centred note.
  */
-function streamGeometry(width: number): StreamGeometry {
+function streamGeometry(width: number, flash: boolean): StreamGeometry {
+  if (flash) return { lead: 0, trail: 0, playheadX: Math.round(width / 2), spacing: 0 };
   const lead = width < 520 ? 4 : width < 720 ? 5 : 6;
   const playheadX = Math.max(96, Math.round(width * 0.26));
   return {
@@ -101,8 +103,9 @@ export function MusicStaff({
   // the head through VexFlow's own stave and formatter offsets.
   const [headCenterX, setHeadCenterX] = useState<number | null>(null);
 
-  const geometry = useMemo(() => streamGeometry(width), [width]);
-  const filling = fill && mode === "stream" && availableHeight > 0;
+  const streaming = mode === "stream" || mode === "flash";
+  const geometry = useMemo(() => streamGeometry(width, mode === "flash"), [mode, width]);
+  const filling = fill && streaming && availableHeight > 0;
   const staffHeight = filling ? availableHeight : compactLandscape ? 118 : 150;
   const scale = filling
     ? Math.min(MAX_FILL_SCALE, Math.max(1, staffHeight / BASE_STREAM_HEIGHT))
@@ -138,7 +141,7 @@ export function MusicStaff({
   // Staff lines and clef stay still while the notes slide past them.
   useEffect(() => {
     const layer = staffLayerRef.current;
-    if (mode !== "stream" || !layer) return;
+    if (!streaming || !layer) return;
     layer.replaceChildren();
     const renderer = new Renderer(layer, Renderer.Backends.SVG);
     renderer.resize(width, staffHeight);
@@ -147,15 +150,15 @@ export function MusicStaff({
     context.setFillStyle(INK);
     context.setStrokeStyle(INK);
     new Stave(8, staveY, innerWidth - 16).addClef("treble").setContext(context).draw();
-  }, [innerWidth, mode, scale, staffHeight, staveY, width]);
+  }, [innerWidth, scale, staffHeight, staveY, streaming, width]);
 
   useEffect(() => {
     const layer = streamLayerRef.current;
-    if (mode !== "stream" || !layer || notes.length === 0) return;
+    if (!streaming || !layer || notes.length === 0) return;
     const { lead, trail, playheadX, spacing } = geometry;
     layer.replaceChildren();
     const renderer = new Renderer(layer, Renderer.Backends.SVG);
-    renderer.resize(playheadX + (lead + 1) * spacing + 40, staffHeight);
+    renderer.resize(Math.max(width, playheadX + (lead + 1) * spacing + 120), staffHeight);
     const context = renderer.getContext();
     context.scale(scale, scale);
     // Notes need a stave to place their heads; the visible one lives in the static layer.
@@ -196,7 +199,7 @@ export function MusicStaff({
     // gap the notes just closed.
     const previous = drawnIndexRef.current;
     drawnIndexRef.current = currentIndex;
-    if (previous >= 0 && currentIndex > previous && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (mode === "stream" && previous >= 0 && currentIndex > previous && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       slideRef.current?.cancel();
       slideRef.current = layer.animate(
         [{ transform: `translateX(${(currentIndex - previous) * spacing}px)` }, { transform: "translateX(0px)" }],
@@ -206,7 +209,7 @@ export function MusicStaff({
 
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
-  }, [currentIndex, feedback, geometry, innerWidth, mode, notes, scale, staffHeight, staveY]);
+  }, [currentIndex, feedback, geometry, innerWidth, mode, notes, scale, staffHeight, staveY, streaming, width]);
 
   useEffect(() => {
     const layer = sheetLayerRef.current;
@@ -257,6 +260,18 @@ export function MusicStaff({
       voice.draw(context, stave);
     }
 
+    // Several systems will not fit at once, so keep the cursor's line in view.
+    const view = containerRef.current;
+    if (view) {
+      const topOffset = compactLandscape ? 10 : 18;
+      const rowTop = topOffset + Math.floor(Math.floor(currentIndex / 4) / measuresPerRow) * rowHeight;
+      const rowBottom = rowTop + rowHeight;
+      if (rowTop < view.scrollTop) view.scrollTop = Math.max(0, rowTop - 6);
+      else if (rowBottom > view.scrollTop + view.clientHeight) {
+        view.scrollTop = rowBottom - view.clientHeight + 6;
+      }
+    }
+
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
   }, [compactLandscape, currentIndex, feedback, mode, notes, width]);
@@ -264,17 +279,18 @@ export function MusicStaff({
   return (
     <div
       ref={containerRef}
-      style={mode === "stream" && !fill ? { height: staffHeight } : undefined}
-      className={`music-staff relative w-full overflow-hidden rounded-xl bg-white/95 ${mode === "sheet" ? "min-h-45" : fill ? "h-full" : ""} ${className ?? ""}`}
+      style={streaming && !fill ? { height: staffHeight } : undefined}
+      className={`music-staff relative w-full rounded-xl bg-white/95 ${mode === "sheet" ? "min-h-45 max-h-[55vh] overflow-y-auto overflow-x-hidden" : `overflow-hidden ${fill ? "h-full" : ""}`} ${className ?? ""}`}
       aria-label={
-        mode === "stream"
-          ? `Treble-clef note stream, note ${currentIndex + 1}`
+        streaming
+          ? `Treble-clef note ${currentIndex + 1}`
           : `Sheet music, note ${currentIndex + 1} of ${notes.length}`
       }
     >
-      {mode === "stream" ? (
+      {streaming ? (
         <>
           <div ref={staffLayerRef} className="staff-layer" />
+          {mode === "stream" && (
           <div
             className="staff-playhead"
             style={{
@@ -282,6 +298,7 @@ export function MusicStaff({
               width: geometry.spacing * 0.68,
             }}
           />
+          )}
           <div className="staff-stream-window">
             <div ref={streamLayerRef} className="staff-layer" />
           </div>
