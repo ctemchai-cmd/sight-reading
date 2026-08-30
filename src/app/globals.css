@@ -102,7 +102,7 @@ html[data-focus-mode="true"] .app-nav {
   z-index: 50;
   align-self: flex-end;
   margin-right: 0.25rem;
-  margin-bottom: -2.15rem;
+  margin-bottom: -2.25rem;
 }
 
 /* The stream scales into whatever height is left; sheet music keeps its own. */
@@ -124,11 +124,15 @@ html[data-focus-mode="true"] .app-nav {
   min-height: 0;
 }
 
-/* Leftover height goes to the keys rather than to empty margin. */
+/* Leftover height goes to the keys rather than to empty margin. The explicit
+   cross-axis sizing overrides the landscape grid rules, whose `align-self: start`
+   collapses the keyboard to its scroll container's zero min-content width. */
 .focus-training-surface .reflex-training-inputs,
 .focus-training-surface .sheet-training-inputs {
   display: flex;
   flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
   min-height: 7rem;
   max-height: 20rem;
 }
@@ -136,6 +140,7 @@ html[data-focus-mode="true"] .app-nav {
 .focus-training-surface .reflex-training-inputs > *,
 .focus-training-surface .sheet-training-inputs > * {
   flex: 1 1 auto;
+  min-width: 0;
 }
 
 .focus-training-surface .responsive-piano-surface {

@@ -24,9 +24,11 @@ export function FocusSurface({ active, onExit, className, children }: FocusSurfa
       <button
         type="button"
         onClick={onExit}
-        className="focus-exit-button inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-xs font-medium text-slate-400 opacity-55 transition hover:text-white hover:opacity-100 focus-visible:text-white focus-visible:opacity-100"
+        title="Exit focus"
+        aria-label="Exit focus"
+        className="focus-exit-button grid size-9 place-items-center rounded-lg border border-slate-700 bg-slate-950/60 text-slate-400 opacity-50 transition hover:text-white hover:opacity-100 focus-visible:text-white focus-visible:opacity-100"
       >
-        <Minimize2 className="size-3.5" aria-hidden="true" /> Exit focus
+        <Minimize2 className="size-4" aria-hidden="true" />
       </button>
       {children}
     </div>
