@@ -21,7 +21,13 @@ html {
   overflow-x: hidden;
 }
 
+/* Played with hands on a piano: a held key, or a long press anywhere near one,
+   should never turn into a text selection or raise the iOS callout menu.
+   Nothing in this application is worth selecting except what you type. */
 body {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
   min-width: 0;
   min-height: 100vh;
   margin: 0;
@@ -41,6 +47,14 @@ button,
 select,
 input {
   font: inherit;
+}
+
+/* Editing a field needs selection to work normally. */
+input,
+textarea,
+[contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .music-staff svg {
@@ -66,26 +80,9 @@ input {
   max-width: none;
 }
 
-/* Nothing in a training view is meant to be selected, and a long press that
-   lands in a text selection interrupts practice — Android will reach past a
-   non-selectable key to the nearest selectable text, so scoping this to the
-   keyboard alone was not enough. `user-select` inherits, so the container is
-   the right place. */
-.note-training-layout,
-.sheet-training-layout,
-.focus-training-surface {
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-/* A held key must stay a held key: `user-select` alone does not stop iOS raising
-   its callout menu on a long press, and the tap highlight flashes over the keys. */
+/* The tap highlight flashes grey over a struck key. */
 .responsive-piano-surface,
 .responsive-piano-surface * {
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
