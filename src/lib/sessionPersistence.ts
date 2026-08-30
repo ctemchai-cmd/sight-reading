@@ -2,8 +2,7 @@ import {
   listPendingSessions,
   queuePendingSession,
   removePendingSession,
-  saveGuestSession,
-} from "@/core/persistence/guestRepository";
+} from "@/core/persistence/pendingSessionRepository";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { TrainingSessionRecord } from "@/types/training";
 
@@ -17,12 +16,12 @@ async function saveCloudSession(session: TrainingSessionRecord): Promise<boolean
   return true;
 }
 
-export async function persistTrainingSession(session: TrainingSessionRecord): Promise<"local" | "synced" | "pending"> {
+export async function persistTrainingSession(session: TrainingSessionRecord): Promise<"synced" | "pending"> {
   const supabase = getSupabaseBrowserClient();
   const user = supabase ? (await supabase.auth.getUser()).data.user : null;
   if (!user) {
-    await saveGuestSession(session);
-    return "local";
+    await queuePendingSession(session);
+    return "pending";
   }
 
   try {

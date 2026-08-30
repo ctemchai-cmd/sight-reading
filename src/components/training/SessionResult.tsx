@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 
 interface SessionResultProps {
   summary: TrainingSummary;
-  syncStatus?: "saving" | "local" | "pending" | "synced";
+  syncStatus?: "saving" | "pending" | "synced";
   onRetry: () => void;
   onPracticeWeak?: () => void;
 }
@@ -26,7 +26,7 @@ export function SessionResult({ summary, syncStatus, onRetry, onPracticeWeak }: 
       <div className="text-center">
         <span className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-teal-400/15 text-teal-300"><TrendingUp /></span>
         <h1 className="text-3xl font-bold text-white">Session complete</h1>
-        <p className="mt-2 text-slate-400">{summary.completedTargets} targets completed · {syncStatus === "pending" ? "Save queued" : syncStatus === "synced" ? "Saved to cloud" : syncStatus === "saving" ? "Saving…" : "Saved on this device"}</p>
+        <p className="mt-2 text-slate-400">{summary.completedTargets} targets completed · {syncStatus === "pending" ? "Cloud save queued" : syncStatus === "synced" ? "Saved to cloud" : "Saving…"}</p>
       </div>
       <div className="grid grid-cols-5 gap-3">
         {metrics.map(([label, value]) => (

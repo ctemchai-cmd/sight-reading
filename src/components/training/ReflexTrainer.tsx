@@ -9,7 +9,6 @@ import { SessionResult } from "@/components/training/SessionResult";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { TREBLE_RANGES } from "@/core/music/notes";
-import { listGuestSessions } from "@/core/persistence/guestRepository";
 import { NoteGenerator } from "@/core/training/noteGenerator";
 import { calculateWeakNoteStats, summarizeTraining } from "@/core/training/scoring";
 import { applyInputToTrial, createOpenTrial, type OpenTrial } from "@/core/training/session";
@@ -28,7 +27,7 @@ import type {
 } from "@/types/training";
 
 type Phase = "configure" | "running" | "paused" | "complete";
-type SaveStatus = "saving" | "local" | "pending" | "synced";
+type SaveStatus = "saving" | "pending" | "synced";
 
 const DEFAULT_CONFIG: TrainingSessionConfig = {
   mode: "reflex",
@@ -56,7 +55,7 @@ export function ReflexTrainer() {
   const generatorRef = useRef<NoteGenerator | null>(null);
   const [feedback, setFeedback] = useState<"correct" | "incorrect" | null>(null);
   const [summary, setSummary] = useState<TrainingSummary | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("local");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("saving");
   const [attemptCount, setAttemptCount] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
   const startedAtRef = useRef("");
@@ -148,12 +147,6 @@ export function ReflexTrainer() {
 
   const startSession = useCallback(async (focusMidis?: number[]) => {
     if (configRef.current.soundEnabled) await initializeAudio();
-    let historicalTrials: TrainingTrial[] = [];
-    try {
-      historicalTrials = (await listGuestSessions()).flatMap((session) => session.trials);
-    } catch {
-      // Private browsing may disable IndexedDB; the session can still run in memory.
-    }
     generatorRef.current = new NoteGenerator({
       minMidi: configRef.current.minMidi,
       maxMidi: configRef.current.maxMidi,
@@ -171,7 +164,7 @@ export function ReflexTrainer() {
     startedAtRef.current = new Date().toISOString();
     phaseRef.current = "running";
     setPhase("running");
-    setTarget(generatorRef.current.generate(calculateWeakNoteStats(historicalTrials)));
+    setTarget(generatorRef.current.generate());
   }, [initializeAudio]);
 
   const markTargetReady = useCallback(() => {

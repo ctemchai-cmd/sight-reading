@@ -2,11 +2,10 @@
 
 import { Cloud, LogIn, LogOut, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatNoteName, midiToNotatedPitch, naturalMidisInRange } from "@/core/music/notes";
-import { listGuestSessions } from "@/core/persistence/guestRepository";
-import { calculateWeakNoteStats } from "@/core/training/scoring";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { formatMilliseconds } from "@/lib/utils";
@@ -45,6 +44,7 @@ interface CloudStatRow {
 }
 
 export function Dashboard() {
+  const router = useRouter();
   const [sessions, setSessions] = useState<DisplaySession[]>([]);
   const [noteStats, setNoteStats] = useState<WeakNoteStat[]>([]);
   const [cloudUser, setCloudUser] = useState<string | null>(null);
@@ -85,17 +85,8 @@ export function Dashboard() {
         weakScore: 1,
       })));
     } else {
-      const guest = await listGuestSessions();
-      setSessions(guest.map((session) => ({
-        id: session.id,
-        mode: session.mode,
-        completedAt: session.completedAt,
-        completedTargets: session.summary.completedTargets,
-        accuracy: session.summary.accuracy,
-        averageResponseMs: session.summary.averageResponseMs,
-        medianResponseMs: session.summary.medianResponseMs,
-      })));
-      setNoteStats(calculateWeakNoteStats(guest.flatMap((session) => session.trials)));
+      setSessions([]);
+      setNoteStats([]);
     }
     setLoading(false);
   }, []);
@@ -126,14 +117,15 @@ export function Dashboard() {
 
   const signOut = async () => {
     await getSupabaseBrowserClient()?.auth.signOut();
-    await load();
+    router.replace("/login");
+    router.refresh();
   };
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-10">
       <div className="flex items-start justify-between">
-        <div><p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-300">Progress</p><h1 className="mt-2 text-4xl font-bold text-white">Training dashboard</h1><p className="mt-2 text-sm text-slate-400">{cloudUser ? <span className="inline-flex items-center gap-2"><Cloud className="size-4" /> Synced as {cloudUser}</span> : "Guest history on this browser"}</p></div>
-        <div className="flex gap-2"><Button variant="ghost" onClick={() => void load()}><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Refresh</Button>{cloudUser ? <Button variant="secondary" onClick={() => void signOut()}><LogOut className="size-4" /> Log out</Button> : <Link href="/login"><Button variant="secondary"><LogIn className="size-4" /> Log in to sync</Button></Link>}</div>
+        <div><p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-300">Progress</p><h1 className="mt-2 text-4xl font-bold text-white">Training dashboard</h1><p className="mt-2 text-sm text-slate-400">{cloudUser ? <span className="inline-flex items-center gap-2"><Cloud className="size-4" /> Synced as {cloudUser}</span> : "Private cloud history"}</p></div>
+        <div className="flex gap-2"><Button variant="ghost" onClick={() => void load()}><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Refresh</Button>{cloudUser ? <Button variant="secondary" onClick={() => void signOut()}><LogOut className="size-4" /> Log out</Button> : <Link href="/login"><Button variant="secondary"><LogIn className="size-4" /> Log in</Button></Link>}</div>
       </div>
 
       <div className="mt-8 grid grid-cols-4 gap-4">

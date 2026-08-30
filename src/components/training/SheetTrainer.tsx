@@ -35,7 +35,7 @@ export function SheetTrainer() {
   const [feedback, setFeedback] = useState<"correct" | "incorrect" | null>(null);
   const [summary, setSummary] = useState<TrainingSummary | null>(null);
   const [armNonce, setArmNonce] = useState(0);
-  const [saveStatus, setSaveStatus] = useState<"saving" | "local" | "pending" | "synced">("local");
+  const [saveStatus, setSaveStatus] = useState<"saving" | "pending" | "synced">("saving");
   const startedAtRef = useRef("");
   const armedRef = useRef(false);
   const { engine, initialize: initializeAudio, error: audioError } = useAudio();

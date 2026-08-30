@@ -8,7 +8,11 @@ These decisions override older or broader statements elsewhere in this document 
 * Primary hardware path: USB MIDI through the Web MIDI API.
 * Edge Chromium and Bluetooth MIDI are best-effort; Safari and mobile are not V1 release blockers.
 * Bluetooth devices are supported when the operating system exposes them to Chrome as a Web MIDI input. V1 will not implement a separate Web Bluetooth/BLE-MIDI protocol stack.
-* V1 remains a complete product slice: Reflex, Sheet Reading, virtual piano, computer keyboard, MIDI, audio, adaptive practice, guest persistence, Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
+* V1 remains a complete product slice: Reflex, Sheet Reading, virtual piano, computer keyboard, MIDI, audio, adaptive practice, private Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
+* V1 is a private, owner-approved application. `/train`, `/dashboard`, and `/settings` require a valid non-anonymous Supabase session whose email is listed in the server-only `PRIVATE_ALLOWED_EMAILS` Vercel environment variable.
+* Public sign-up and guest training are disabled. `/signup` redirects to the private login page. Approved accounts are created manually by the owner in Supabase, and public user registration must be disabled in Supabase Authentication settings.
+* The application fails closed if Supabase public configuration or `PRIVATE_ALLOWED_EMAILS` is absent. The landing page, login page, and authentication callback remain public.
+* IndexedDB is used only as a pending cloud-save queue if authentication or Supabase connectivity is interrupted after a private training session has already started. It is not a guest-history store.
 * Vercel is the primary runtime and deployment target. Local execution is for development verification only; production configuration, routing, security headers, and environment variables must work on Vercel.
 * PWA V1 is installable in standalone mode but does not promise offline training or a service worker cache.
 * UI language is English for V1.
@@ -37,8 +41,8 @@ Implemented in the repository:
 * Sheet Reading with four 4/4 measures, sixteen quarter notes, current-note highlighting, and no advance on a wrong input.
 * VexFlow 5 SVG notation, Tone.js audio initialized by explicit user action, and a normalized input path.
 * Web MIDI permission flow, device selection, connection state handling, Note On/Off parsing, velocity-zero Note Off, channel normalization, and reconnect-safe UI.
-* IndexedDB guest history and pending cloud-save queue.
-* Supabase email/password Auth, reproducible SQL migration, RLS, transactional session RPC, aggregate per-note statistics, and retry-safe session IDs.
+* IndexedDB pending cloud-save queue without a guest-mode bypass.
+* Private Supabase email/password Auth, server-side email allowlist, protected application routes, reproducible SQL migration, RLS, transactional session RPC, aggregate per-note statistics, and retry-safe session IDs.
 * Dashboard metrics, response-time trend, weakest notes, and pitch heatmap.
 * Unit/component tests, Chrome Playwright smoke test, ESLint, strict typecheck, and successful Next.js production build.
 
@@ -46,6 +50,8 @@ External setup still required before cloud features are live:
 
 * Create or select the Supabase project and apply `supabase/migrations/20260830000000_initial.sql`.
 * Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel for Production, Preview, and Development.
+* Set server-only `PRIVATE_ALLOWED_EMAILS` in Vercel to the approved Supabase login email. Multiple approved emails are comma-separated.
+* Disable public user sign-up in Supabase Authentication and create the approved user manually. Remove any existing users who should no longer have access.
 * Add each Vercel deployment domain and `/auth/callback` to the Supabase Auth URL configuration.
 * Import the repository into Vercel and deploy.
 * Perform the hardware acceptance test with a real USB MIDI keyboard in current Chrome Desktop. Bluetooth MIDI remains best-effort.
@@ -1078,19 +1084,11 @@ Apple
 Magic Link
 ```
 
-Do not require an account before the user can try the application.
+V1 requires an owner-approved account before training can start.
 
-Support:
+Public registration and anonymous/guest access are disabled. Approved users are created manually in Supabase and must also be listed in the server-only `PRIVATE_ALLOWED_EMAILS` Vercel environment variable. Supabase public sign-up must be disabled so the route guard is not the only enrollment control.
 
-```txt
-Guest Mode
-```
-
-Guest data may be stored in localStorage.
-
-When user later creates an account, optionally migrate guest settings/statistics.
-
-Migration can be a future feature.
+If a valid session expires during a training session, the completed result may be queued temporarily in IndexedDB and synced after the approved user authenticates again. This queue must not expose a guest-training path.
 
 ---
 
@@ -1106,7 +1104,7 @@ Routes:
 /dashboard
 /settings
 /login
-/signup
+/signup (redirects to /login; public registration is disabled)
 ```
 
 Potential future:
@@ -2419,7 +2417,7 @@ Implement:
 * RLS
 * migrations
 
-Anonymous/guest training must still work.
+All training routes require the private, allowlisted Supabase login. IndexedDB may queue an interrupted cloud save, but anonymous/guest training must not be exposed.
 
 ---
 
