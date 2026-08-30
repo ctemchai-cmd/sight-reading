@@ -104,7 +104,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
 
   useEffect(() => {
     let active = true;
-    void loadNoteHistory().then((stats) => {
+    void loadNoteHistory().then(({ stats }) => {
       if (active) historyRef.current = stats;
     });
     return () => {

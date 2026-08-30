@@ -44,6 +44,8 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [heatmapMetric, setHeatmapMetric] = useState<"speed" | "accuracy">("speed");
   const [rejected, setRejected] = useState(0);
+  // Why the page is empty, when it is empty for a reason rather than for lack of practice.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,10 +55,13 @@ export function Dashboard() {
     setCloudUser(user?.email ?? null);
 
     if (supabase && user) {
-      const [{ data: cloudSessions }, history] = await Promise.all([
+      const [{ data: cloudSessions, error: sessionsError }, history] = await Promise.all([
         supabase.from("training_sessions").select("id,mode,completed_at,completed_targets,accuracy,average_response_ms,median_response_ms").order("completed_at", { ascending: false }),
         loadNoteHistory(),
       ]);
+      // A refused query and an untouched account both return nothing, and only
+      // one of them means "go and practise".
+      setLoadError(sessionsError?.message ?? history.error);
       const rows = (cloudSessions ?? []) as unknown as CloudSessionRow[];
       setSessions(rows.map((row) => ({
         id: row.id,
@@ -67,10 +72,11 @@ export function Dashboard() {
         averageResponseMs: row.average_response_ms === null ? null : Number(row.average_response_ms),
         medianResponseMs: row.median_response_ms === null ? null : Number(row.median_response_ms),
       })));
-      setNoteStats(history);
+      setNoteStats(history.stats);
     } else {
       setSessions([]);
       setNoteStats([]);
+      setLoadError(null);
     }
     setLoading(false);
   }, []);
@@ -119,6 +125,18 @@ export function Dashboard() {
         <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-300">Progress</p><h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">Training dashboard</h1><p className="mt-2 break-all text-sm text-slate-400">{cloudUser ? <span className="inline-flex items-center gap-2"><Cloud className="size-4 shrink-0" /> Synced as {cloudUser}</span> : "Private cloud history"}</p></div>
         <div className="flex flex-wrap gap-2"><Button className="flex-1 sm:flex-none" variant="ghost" onClick={() => void load()}><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Refresh</Button>{cloudUser ? <Button className="flex-1 sm:flex-none" variant="secondary" onClick={() => void signOut()}><LogOut className="size-4" /> Log out</Button> : <Link className="flex-1 sm:flex-none" href="/login"><Button className="w-full" variant="secondary"><LogIn className="size-4" /> Log in</Button></Link>}</div>
       </div>
+
+      {loadError && (
+        <Card className="mt-7 border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-200 sm:mt-8">
+          <p className="font-semibold">Your history could not be read</p>
+          <p className="mt-1 leading-6">
+            The page below is empty because the request was refused, not because there is nothing recorded.
+            Signing in again fixes an expired session; a refusal that survives that is the database declining
+            the request, and the grants in <code>supabase/migrations/</code> are the thing to check.
+          </p>
+          <p className="mt-2 font-mono text-xs text-rose-300">{loadError}</p>
+        </Card>
+      )}
 
       {rejected > 0 && (
         <Card className="mt-7 border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200 sm:mt-8">

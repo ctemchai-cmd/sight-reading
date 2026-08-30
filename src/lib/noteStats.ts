@@ -27,14 +27,23 @@ function toTotals(row: NoteStatRow): NoteTotals {
   };
 }
 
+export interface NoteHistory {
+  stats: WeakNoteStat[];
+  /** Why the history is empty, when it is empty for a reason worth showing. */
+  error: string | null;
+}
+
 /**
  * Every note the player has practised, scored the way a session scores itself.
- * Empty when signed out or unconfigured — row-level security already limits the
- * rows to the signed-in player, so no user check is needed here.
+ * Row-level security already limits the rows to the signed-in player, so no
+ * user check is needed here. It never throws — training must carry on without
+ * its history — but it does say when something went wrong, because an empty
+ * history and a refused one look identical otherwise.
  */
-export async function loadNoteHistory(): Promise<WeakNoteStat[]> {
+export async function loadNoteHistory(): Promise<NoteHistory> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return [];
-  const { data } = await supabase.from("user_note_stats").select(COLUMNS);
-  return weakNoteStatsFromTotals(((data ?? []) as unknown as NoteStatRow[]).map(toTotals));
+  if (!supabase) return { stats: [], error: null };
+  const { data, error } = await supabase.from("user_note_stats").select(COLUMNS);
+  if (error) return { stats: [], error: error.message };
+  return { stats: weakNoteStatsFromTotals(((data ?? []) as unknown as NoteStatRow[]).map(toTotals)), error: null };
 }
