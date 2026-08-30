@@ -1,0 +1,44 @@
+export type NoteLetter = "C" | "D" | "E" | "F" | "G" | "A" | "B";
+export type Accidental = "flat" | "natural" | "sharp";
+export type Clef = "treble" | "bass";
+export type MidiNumber = number;
+
+export interface NotatedPitch {
+  letter: NoteLetter;
+  accidental: Accidental;
+  octave: number;
+}
+
+export interface TargetNote {
+  id: string;
+  notation: NotatedPitch;
+  expectedMidi: MidiNumber;
+}
+
+export type NoteDuration = "w" | "h" | "q" | "8" | "16";
+
+export interface ScoreNote {
+  id: string;
+  pitch: TargetNote;
+  duration: NoteDuration;
+  dotted?: boolean;
+}
+
+export interface Measure {
+  id: string;
+  notes: ScoreNote[];
+}
+
+export interface Score {
+  clef: Clef;
+  beatsPerMeasure: number;
+  beatValue: number;
+  measures: Measure[];
+}
+
+export type TrebleRangePreset = "staff" | "ledger-1" | "ledger-2" | "ledger-3" | "custom";
+
+export interface MidiRange {
+  minMidi: number;
+  maxMidi: number;
+}

@@ -1,0 +1,2789 @@
+# Project Specification — Sight Reading Trainer
+
+## Current V1 Implementation Decisions (Updated 2026-08-30)
+
+These decisions override older or broader statements elsewhere in this document where they conflict.
+
+* Primary supported platform: current Google Chrome desktop on macOS and Windows.
+* Primary hardware path: USB MIDI through the Web MIDI API.
+* Edge Chromium and Bluetooth MIDI are best-effort; Safari and mobile are not V1 release blockers.
+* Bluetooth devices are supported when the operating system exposes them to Chrome as a Web MIDI input. V1 will not implement a separate Web Bluetooth/BLE-MIDI protocol stack.
+* V1 remains a complete product slice: Reflex, Sheet Reading, virtual piano, computer keyboard, MIDI, audio, adaptive practice, guest persistence, Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
+* Vercel is the primary runtime and deployment target. Local execution is for development verification only; production configuration, routing, security headers, and environment variables must work on Vercel.
+* PWA V1 is installable in standalone mode but does not promise offline training or a service worker cache.
+* UI language is English for V1.
+* Treble clef and natural notes are the only scored notation in V1. The domain model must still preserve written pitch spelling separately from sounding MIDI pitch.
+* Performance mode, native mobile applications, bass/grand staff, advanced rhythm, MusicXML, and full offline sync remain future work.
+
+### V1 Metric Definitions
+
+* Accuracy means first-attempt accuracy: targets answered correctly on the first input divided by targets completed.
+* Mistakes means the total number of incorrect note-on inputs.
+* Correct response time runs from the moment the rendered target is armed to the first correct input. Incorrect inputs do not restart that timer.
+* A training trial represents one displayed target; a trial may contain multiple input attempts.
+
+### Delivery Order
+
+Build V1 as deployable vertical milestones: foundation and core logic, playable Reflex, MIDI/audio, Sheet Reading, Supabase persistence, adaptive training/dashboard, then production hardening. Each milestone must remain deployable to Vercel.
+
+### Current Implementation Status (Updated 2026-08-30)
+
+Implemented in the repository:
+
+* Next.js 16 App Router application with strict TypeScript, Tailwind CSS, installable PWA metadata, production security headers, and a Vercel-compatible build.
+* Music domain types that keep written pitch spelling separate from sounding MIDI pitch.
+* Treble natural-note ranges, MIDI/note conversion, ledger classification, uniform generation, adaptive weighting, trial/attempt scoring, and first-attempt accuracy.
+* Reflex Trainer with 25/50/71/100/endless sessions, pause, focus mode, configurable delay, ledger presets, custom MIDI range, virtual piano, computer keyboard input, results, and weak-note replay.
+* Sheet Reading with four 4/4 measures, sixteen quarter notes, current-note highlighting, and no advance on a wrong input.
+* VexFlow 5 SVG notation, Tone.js audio initialized by explicit user action, and a normalized input path.
+* Web MIDI permission flow, device selection, connection state handling, Note On/Off parsing, velocity-zero Note Off, channel normalization, and reconnect-safe UI.
+* IndexedDB guest history and pending cloud-save queue.
+* Supabase email/password Auth, reproducible SQL migration, RLS, transactional session RPC, aggregate per-note statistics, and retry-safe session IDs.
+* Dashboard metrics, response-time trend, weakest notes, and pitch heatmap.
+* Unit/component tests, Chrome Playwright smoke test, ESLint, strict typecheck, and successful Next.js production build.
+
+External setup still required before cloud features are live:
+
+* Create or select the Supabase project and apply `supabase/migrations/20260830000000_initial.sql`.
+* Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel for Production, Preview, and Development.
+* Add each Vercel deployment domain and `/auth/callback` to the Supabase Auth URL configuration.
+* Import the repository into Vercel and deploy.
+* Perform the hardware acceptance test with a real USB MIDI keyboard in current Chrome Desktop. Bluetooth MIDI remains best-effort.
+
+## 1. Project Overview
+
+Build a web application for practicing piano sight-reading and music-note recognition.
+
+The main goal is not simply to teach note names. The application should train the complete loop:
+
+Visual notation → recognition → physical response → accuracy → speed
+
+The application should initially focus on treble-clef note reading, especially ledger-line notes above and below the five-line staff.
+
+The architecture must be designed from the beginning so the project can later support:
+
+* Bass clef
+* Grand staff
+* Both hands
+* Rhythm
+* Chords
+* Intervals
+* Scales
+* Arpeggios
+* MIDI keyboard input
+* Velocity
+* Sustain pedal
+* Adaptive training
+* Full sight-reading exercises
+* User progress/history
+* Difficulty progression
+
+The application will be deployed on Vercel and use Supabase for authentication and persistent data.
+
+---
+
+# 2. Primary Goal
+
+The application should help the user progress from:
+
+"I need to calculate which note this is"
+
+to:
+
+"I recognize the note immediately"
+
+and ultimately:
+
+"I recognize groups, intervals, and musical patterns while reading ahead."
+
+The application should therefore measure more than accuracy.
+
+It should record:
+
+* Note recognition speed
+* Accuracy
+* Performance per MIDI pitch
+* Performance by note range
+* Ledger-line performance
+* Mistake patterns
+* Session performance
+* Historical improvement
+
+---
+
+# 3. Technology Stack
+
+Use:
+
+* Next.js
+* App Router
+* TypeScript
+* React
+* Tailwind CSS
+* shadcn/ui where useful
+* Supabase
+* PostgreSQL via Supabase
+* Supabase Auth
+* @supabase/ssr
+* VexFlow 5 for notation rendering
+* Tone.js for browser audio
+* Web MIDI API for MIDI keyboard support
+* Vercel for hosting
+
+Do NOT unnecessarily introduce:
+
+* Redux
+* Zustand unless state complexity actually requires it
+* Firebase
+* Express
+* Separate backend server
+* Heavy animation frameworks
+* Microservices
+
+Keep the architecture simple and modular.
+
+---
+
+# 4. Important Architecture Principle
+
+The application must separate:
+
+1. Music/game logic
+2. Input
+3. Audio
+4. Rendering
+5. Persistence
+6. UI
+
+The game engine MUST NOT care whether the player entered a note using:
+
+* Mouse/touch piano
+* Computer keyboard
+* MIDI keyboard
+
+Every input system should normalize its input into the same structure.
+
+Example:
+
+```ts
+type NoteInputEvent = {
+  midi: number
+  velocity: number | null
+  source: "touch" | "computer-keyboard" | "midi"
+  timestamp: number
+}
+```
+
+Example:
+
+Middle C:
+
+```ts
+{
+  midi: 60,
+  velocity: 84,
+  source: "midi",
+  timestamp: performance.now()
+}
+```
+
+All game modes consume this normalized event.
+
+This is an important requirement.
+
+Do not embed MIDI-specific logic directly inside the training components.
+
+---
+
+# 5. Music Data Model
+
+Internally, notes should primarily be represented by MIDI note number.
+
+Example:
+
+```ts
+type MusicNote = {
+  midi: number
+  letter: "C" | "D" | "E" | "F" | "G" | "A" | "B"
+  accidental: "natural" | "sharp" | "flat"
+  octave: number
+}
+```
+
+Examples:
+
+```txt
+C4 = MIDI 60
+D4 = MIDI 62
+E4 = MIDI 64
+C5 = MIDI 72
+```
+
+Create centralized helper utilities for:
+
+```ts
+midiToNote()
+noteToMidi()
+midiToVexFlowKey()
+getLedgerLineCount()
+getStaffPosition()
+getClefRange()
+```
+
+Do not duplicate conversion logic throughout the application.
+
+---
+
+# 6. V1 Scope
+
+V1 should contain three main training modes.
+
+## Mode A — Reflex Trainer
+
+Purpose:
+
+Train instant recognition of individual notes.
+
+Flow:
+
+1. Display one note on the staff.
+2. Start timer when the note becomes visible.
+3. User enters a note.
+4. Determine correct/incorrect.
+5. Record response time.
+6. Give quick visual feedback.
+7. Immediately display another note.
+8. Continue until session target is reached.
+
+Default:
+
+```txt
+Notes per session: 50
+```
+
+Settings:
+
+* 25 notes
+* 50 notes
+* 71 notes
+* 100 notes
+* Endless
+
+User should be able to select note range.
+
+Examples:
+
+```txt
+Staff only
+Staff + 1 ledger
+Staff + 2 ledgers
+Staff + 3 ledgers
+Custom MIDI range
+```
+
+Initial clef:
+
+```txt
+Treble
+```
+
+Architecture must support bass clef later.
+
+---
+
+# 7. Reflex Trainer Timing
+
+Timing accuracy matters.
+
+Use:
+
+```ts
+performance.now()
+```
+
+Do not use `Date.now()` for reaction timing.
+
+When the note is rendered and ready:
+
+```ts
+noteShownAt = performance.now()
+```
+
+When valid player input is received:
+
+```ts
+responseAt = performance.now()
+
+responseTimeMs = responseAt - noteShownAt
+```
+
+Important:
+
+Incorrect notes should NOT reset the original timer.
+
+Example:
+
+Target = A4
+
+User:
+
+```txt
+G4 at 600 ms ❌
+A4 at 1100 ms ✅
+```
+
+Record:
+
+```txt
+firstAttemptMs = 600
+correctResponseMs = 1100
+attemptCount = 2
+```
+
+This lets us distinguish:
+
+* Fast and correct
+* Fast but inaccurate
+* Slow but accurate
+
+---
+
+# 8. Reflex Trainer Feedback
+
+Correct:
+
+* Brief green feedback
+* Play note
+* Advance quickly
+
+Incorrect:
+
+* Brief red feedback
+* Keep target visible
+* Do not immediately reveal answer unless configured
+* Allow another attempt
+
+Do NOT use long animations.
+
+Training speed is important.
+
+Target transition delay should be roughly configurable around:
+
+```txt
+100–300 ms
+```
+
+Add:
+
+```txt
+Instant next note
+Small delay
+```
+
+as user settings.
+
+---
+
+# 9. Mode B — Sheet Reading
+
+Purpose:
+
+Train behavior closer to real sheet music reading.
+
+Unlike Reflex mode, multiple notes should be visible simultaneously.
+
+Example:
+
+```txt
+| ♩ ♩ ♩ ♩ | ♩ ♩ ♩ ♩ |
+```
+
+Generate several measures ahead.
+
+Initial implementation may simplify rhythm to quarter notes.
+
+V1 Sheet Reading:
+
+* Treble clef
+* 4/4
+* Quarter notes
+* Single notes
+* No accidentals initially
+* No chords
+* No rests initially
+
+Suggested default:
+
+```txt
+4 measures
+16 notes
+```
+
+Difficulty options:
+
+```txt
+Easy
+Medium
+Hard
+Custom
+```
+
+---
+
+# 10. Sheet Reading Cursor
+
+The current expected note should be visually highlighted.
+
+Example:
+
+```txt
+note 1
+note 2
+note 3 ← current
+note 4
+```
+
+Highlight should NOT obscure notation.
+
+After a correct input:
+
+```txt
+currentIndex++
+```
+
+and move highlight.
+
+Optional setting:
+
+```txt
+Advance on wrong note: OFF
+```
+
+Default:
+
+Wrong note does NOT advance.
+
+Future performance mode may behave differently.
+
+---
+
+# 11. Mode C — Performance / Continuous Reading
+
+Create architecture for this mode but it does not need to be fully featured in the first implementation.
+
+Goal:
+
+Replicate real sight-reading.
+
+Rules:
+
+* Music continues at a fixed tempo.
+* User should not stop.
+* Wrong notes are recorded but do not pause the exercise.
+* Cursor continues according to musical time.
+
+Future settings:
+
+```txt
+40 BPM
+50 BPM
+60 BPM
+80 BPM
+100 BPM
+120 BPM
+```
+
+Metronome support should be possible.
+
+Do NOT make this a blocking requirement for initial MVP.
+
+---
+
+# 12. Note Generation Engine
+
+Do NOT simply use:
+
+```ts
+Math.random()
+```
+
+inside React components.
+
+Create a separate note generation module.
+
+Suggested interface:
+
+```ts
+interface NoteGeneratorConfig {
+  clef: "treble" | "bass"
+  minMidi: number
+  maxMidi: number
+  naturalsOnly: boolean
+  adaptiveMode: boolean
+  avoidImmediateRepeat: boolean
+}
+```
+
+Function:
+
+```ts
+generateNote(config): MusicNote
+```
+
+For sequences:
+
+```ts
+generateSequence(config, length): MusicNote[]
+```
+
+---
+
+# 13. Randomization Rules
+
+Avoid poor random sequences.
+
+For example:
+
+```txt
+C C C C C
+```
+
+should rarely occur unless intentional.
+
+Default:
+
+```txt
+avoidImmediateRepeat = true
+```
+
+V1 random generation should be uniformly distributed within the selected note set.
+
+Later adaptive mode will override uniform probability.
+
+---
+
+# 14. Adaptive Training System
+
+This is one of the most important future features.
+
+The system should learn which notes the user struggles with.
+
+For every note, calculate:
+
+```txt
+attempt count
+correct count
+incorrect count
+accuracy
+average reaction time
+median reaction time
+best reaction time
+recent reaction time
+```
+
+Example:
+
+```txt
+F5
+Accuracy: 98%
+Average: 340 ms
+
+A5
+Accuracy: 83%
+Average: 1,280 ms
+```
+
+The system should eventually increase the probability of A5.
+
+Suggested future formula:
+
+```txt
+difficultyWeight =
+  reactionTimeWeight
+  × errorWeight
+  × recencyWeight
+```
+
+Do NOT implement an overly complicated ML system.
+
+Simple weighted random selection is enough.
+
+---
+
+# 15. Adaptive Selection V1
+
+Once basic statistics exist, implement:
+
+```txt
+70% weak/problem notes
+30% normal random notes
+```
+
+But avoid repeatedly showing one note.
+
+Suggested constraint:
+
+Do not show the same note more than twice within the last 5 generated notes unless the note pool is very small.
+
+---
+
+# 16. Ledger-Line Training
+
+Ledger-line training is a first-class feature, not merely another difficulty level.
+
+Provide presets:
+
+```txt
+Staff Only
+
+Upper Ledger
+Lower Ledger
+
+Upper +1
+Upper +2
+Upper +3
+
+Lower +1
+Lower +2
+Lower +3
+
+All
+```
+
+Also allow custom MIDI range.
+
+The user should be able to launch:
+
+```txt
+Ledger Lines Only
+```
+
+where normal staff notes are excluded or heavily reduced.
+
+---
+
+# 17. Interval Training — Future
+
+Architecture should support exercises where the important information is not just absolute pitch.
+
+Future examples:
+
+```txt
+C → D = second
+C → E = third
+C → G = fifth
+```
+
+Store:
+
+```ts
+type NoteRelationship = {
+  previousMidi: number
+  currentMidi: number
+  semitoneDistance: number
+  diatonicDistance: number
+  direction: "up" | "down" | "same"
+}
+```
+
+This does not need full UI in V1.
+
+---
+
+# 18. Notation Rendering
+
+Use VexFlow.
+
+Prefer SVG renderer rather than Canvas unless there is a strong technical reason otherwise.
+
+Reasons:
+
+* responsive scaling
+* easier CSS interaction
+* individual SVG elements
+* cleaner resizing
+* easier future highlighting
+
+Build a wrapper component:
+
+```txt
+MusicStaff
+```
+
+Do not put VexFlow setup directly throughout multiple pages.
+
+Suggested:
+
+```ts
+<MusicStaff
+  clef="treble"
+  notes={notes}
+  currentIndex={currentIndex}
+/>
+```
+
+Responsibilities:
+
+* Initialize VexFlow
+* Render staff
+* Render clef
+* Render notes
+* Render ledger lines
+* Render measure boundaries
+* Highlight current note
+* Resize when container changes
+
+Use ResizeObserver where appropriate.
+
+---
+
+# 19. Staff Responsiveness
+
+Desktop should be primary for MIDI mode.
+
+Touch/tablet should still work.
+
+On narrow devices:
+
+* scale notation
+* wrap measures if needed
+* maintain readable note spacing
+
+Do not shrink notation until it becomes difficult to read.
+
+---
+
+# 20. Audio Engine
+
+Create an abstraction:
+
+```ts
+interface AudioEngine {
+  initialize(): Promise<void>
+  noteOn(midi: number, velocity?: number): void
+  noteOff(midi: number): void
+  playNote(midi: number, velocity?: number, duration?: number): void
+  stopAll(): void
+}
+```
+
+Do not call Tone.js directly everywhere in UI.
+
+Implement:
+
+```txt
+ToneAudioEngine
+```
+
+---
+
+# 21. Initial Sound Strategy
+
+For early MVP:
+
+Use Tone.js and a lightweight synth so development does not depend on large audio assets.
+
+Example sound:
+
+```txt
+simple piano-like / soft synth
+```
+
+Later replace or add:
+
+```txt
+Sampled Piano
+```
+
+using Tone.Sampler.
+
+The AudioEngine abstraction should allow changing this without touching training logic.
+
+---
+
+# 22. Piano Sample Strategy
+
+When real piano samples are added:
+
+Do NOT randomly download piano samples from the internet.
+
+Only use samples with a license that explicitly permits the intended project use.
+
+Store samples either:
+
+```txt
+/public/audio/piano/
+```
+
+or Supabase Storage if remote delivery becomes desirable.
+
+For low latency, static Vercel assets are preferred initially.
+
+It is NOT necessary to sample all 88 keys.
+
+Tone.Sampler can repitch nearby samples.
+
+Example sample points might eventually include every minor third or similar interval.
+
+Exact sample library choice should remain replaceable.
+
+---
+
+# 23. Browser Audio Restrictions
+
+Audio context may require user interaction before playback.
+
+Therefore include an explicit action such as:
+
+```txt
+Start Training
+```
+
+which initializes audio.
+
+Do not attempt to autoplay sound immediately when the page loads.
+
+---
+
+# 24. Virtual Piano Input
+
+Before MIDI is available, provide an on-screen keyboard.
+
+Requirements:
+
+* Full-width responsive piano
+* White keys
+* Black keys
+* Press animation
+* Mouse support
+* Touch support
+* Multi-touch if reasonably achievable
+* Correct MIDI mapping
+
+The visible keyboard range should depend on selected training range.
+
+At minimum support enough keys for currently displayed notes.
+
+---
+
+# 25. Computer Keyboard Input
+
+Optional but recommended.
+
+Example default mapping:
+
+```txt
+A = C
+W = C#
+S = D
+E = D#
+D = E
+F = F
+T = F#
+G = G
+Y = G#
+H = A
+U = A#
+J = B
+```
+
+Allow disabling it.
+
+Do not make this mapping central to the architecture.
+
+Normalize to NoteInputEvent.
+
+---
+
+# 26. MIDI Input Architecture
+
+Create:
+
+```txt
+MidiInputProvider
+```
+
+or equivalent service/hook.
+
+Suggested interface:
+
+```ts
+interface InputProvider {
+  start(): Promise<void>
+  stop(): void
+  subscribe(callback: (event: NoteInputEvent) => void): () => void
+}
+```
+
+Implement:
+
+```txt
+TouchInputProvider
+KeyboardInputProvider
+MidiInputProvider
+```
+
+All produce the same NoteInputEvent.
+
+---
+
+# 27. MIDI Browser Support
+
+Before attempting connection:
+
+```ts
+if (!("requestMIDIAccess" in navigator)) {
+   // MIDI unavailable
+}
+```
+
+Display:
+
+```txt
+Web MIDI is not supported by this browser.
+You can continue using the on-screen piano.
+```
+
+Do not break the app when MIDI is unsupported.
+
+MIDI is enhancement, not mandatory.
+
+---
+
+# 28. MIDI Permission Flow
+
+MIDI access should only be requested after explicit user action.
+
+Button:
+
+```txt
+Connect MIDI Keyboard
+```
+
+Then:
+
+```ts
+navigator.requestMIDIAccess()
+```
+
+Do not request MIDI permission automatically on initial page load.
+
+---
+
+# 29. MIDI Device Selection
+
+If several devices exist, show them.
+
+Example:
+
+```txt
+MIDI Input
+
+○ KeyStation 61 MK3
+○ Digital Piano
+○ IAC Driver
+```
+
+Remember selected MIDI device locally where possible.
+
+Handle:
+
+* device connect
+* device disconnect
+* reconnect
+
+Listen for MIDI state changes.
+
+---
+
+# 30. MIDI Message Parsing
+
+Support at minimum:
+
+```txt
+Note On
+Note Off
+```
+
+MIDI status:
+
+```txt
+0x90 = Note On
+0x80 = Note Off
+```
+
+Important:
+
+A Note On with velocity 0 should be treated as Note Off.
+
+Normalize channels unless channel filtering is introduced later.
+
+---
+
+# 31. MIDI Velocity
+
+Capture MIDI velocity:
+
+```txt
+0–127
+```
+
+Map audio volume appropriately.
+
+Training correctness should initially ignore velocity.
+
+Example:
+
+Target:
+
+```txt
+C4
+```
+
+Any velocity > 0 should count as the same C4 note.
+
+Later velocity exercises may be introduced separately.
+
+---
+
+# 32. Sustain Pedal — Future
+
+Architecture should not assume all MIDI messages are notes.
+
+Later support:
+
+```txt
+CC64 sustain
+```
+
+Do not implement sustain scoring in V1.
+
+---
+
+# 33. Authentication
+
+Use Supabase Auth.
+
+Initial supported login:
+
+```txt
+Email + password
+```
+
+Optional future:
+
+```txt
+Google
+Apple
+Magic Link
+```
+
+Do not require an account before the user can try the application.
+
+Support:
+
+```txt
+Guest Mode
+```
+
+Guest data may be stored in localStorage.
+
+When user later creates an account, optionally migrate guest settings/statistics.
+
+Migration can be a future feature.
+
+---
+
+# 34. User Pages
+
+Routes:
+
+```txt
+/
+/train
+/train/reflex
+/train/sheet
+/dashboard
+/settings
+/login
+/signup
+```
+
+Potential future:
+
+```txt
+/train/performance
+/train/intervals
+/train/rhythm
+```
+
+---
+
+# 35. Landing Page
+
+Keep simple.
+
+Display:
+
+```txt
+Sight Reading Trainer
+
+Read faster.
+Recognize notes instantly.
+Train real sight-reading.
+```
+
+Primary button:
+
+```txt
+Start Training
+```
+
+Secondary:
+
+```txt
+View Progress
+```
+
+Do not make an overly marketing-heavy landing page.
+
+The project is primarily a training tool.
+
+---
+
+# 36. Training Home
+
+`/train`
+
+Cards:
+
+```txt
+Reflex
+
+Single-note recognition.
+Train speed and accuracy.
+
+
+Sheet Reading
+
+Read multiple notes ahead.
+Closer to real sheet music.
+
+
+Ledger Drill
+
+Focus on notes outside the staff.
+```
+
+Performance mode can initially appear as:
+
+```txt
+Coming later
+```
+
+or remain hidden.
+
+---
+
+# 37. Reflex Training Screen Layout
+
+Desktop concept:
+
+```txt
+┌─────────────────────────────────────────────┐
+│ Reflex       18 / 50       Accuracy 96%    │
+├─────────────────────────────────────────────┤
+│                                             │
+│                TREBLE STAFF                 │
+│                                             │
+│                    ♩                        │
+│                                             │
+│               Current: ?                    │
+│                                             │
+├─────────────────────────────────────────────┤
+│                                             │
+│               VIRTUAL PIANO                 │
+│                                             │
+├─────────────────────────────────────────────┤
+│ MIDI: Connected     Avg: 0.81s              │
+└─────────────────────────────────────────────┘
+```
+
+Do NOT show note name while waiting for the answer.
+
+---
+
+# 38. Session Configuration
+
+Before starting Reflex:
+
+```txt
+Clef
+Treble
+
+Range
+Staff + 2 Ledger
+
+Number of Notes
+50
+
+Training Type
+Random / Adaptive
+
+Input
+Touch / Keyboard / MIDI
+
+Sound
+On
+
+Feedback
+Minimal
+```
+
+Save these as user preferences.
+
+---
+
+# 39. Session Result Screen
+
+After a session:
+
+```txt
+Session Complete
+
+Score
+47 / 50
+
+Accuracy
+94%
+
+Average Correct Response
+0.82 s
+
+Median Response
+0.71 s
+
+Best
+0.31 s
+
+Mistakes
+5
+
+Weakest Notes
+A5    1.42 s
+C6    1.31 s
+D4    1.18 s
+```
+
+Provide:
+
+```txt
+Practice Weak Notes
+Retry
+Dashboard
+```
+
+"Practice Weak Notes" should generate a training configuration focused on the weak notes.
+
+---
+
+# 40. Statistics Dashboard
+
+Dashboard should prioritize useful training information.
+
+Top metrics:
+
+```txt
+Sessions
+Total Notes
+Overall Accuracy
+Average Response
+Recent Average
+```
+
+Charts:
+
+1. Average reaction time over sessions
+2. Accuracy over sessions
+3. Weakest notes
+4. Note heatmap
+
+Do not add excessive dashboard charts.
+
+---
+
+# 41. Note Heatmap
+
+This is an important feature.
+
+Display every currently relevant pitch.
+
+Example:
+
+```txt
+C4   0.42s  98%
+D4   0.39s  99%
+E4   0.35s  99%
+...
+A5   1.31s  81%
+B5   1.17s  86%
+C6   1.44s  78%
+```
+
+Visual intensity should represent either:
+
+```txt
+response time
+```
+
+or:
+
+```txt
+accuracy
+```
+
+Allow toggle.
+
+---
+
+# 42. Database Design
+
+Use Supabase PostgreSQL.
+
+Enable Row Level Security on every user-owned table.
+
+Do NOT expose data across users.
+
+---
+
+# 43. Table: profiles
+
+```sql
+profiles
+
+id uuid primary key references auth.users(id)
+display_name text
+created_at timestamptz
+updated_at timestamptz
+```
+
+---
+
+# 44. Table: user_preferences
+
+```sql
+user_preferences
+
+id uuid primary key
+user_id uuid references auth.users(id)
+
+default_clef text
+default_min_midi int
+default_max_midi int
+default_session_length int
+adaptive_mode boolean
+sound_enabled boolean
+input_preference text
+
+created_at timestamptz
+updated_at timestamptz
+```
+
+Unique constraint:
+
+```txt
+user_id
+```
+
+---
+
+# 45. Table: training_sessions
+
+```sql
+training_sessions
+
+id uuid primary key
+user_id uuid references auth.users(id)
+
+mode text
+clef text
+
+started_at timestamptz
+completed_at timestamptz
+
+note_count int
+correct_count int
+incorrect_count int
+
+accuracy numeric
+average_response_ms numeric
+median_response_ms numeric
+best_response_ms numeric
+
+config jsonb
+
+created_at timestamptz
+```
+
+`config` may contain:
+
+```json
+{
+  "minMidi": 55,
+  "maxMidi": 84,
+  "adaptive": true,
+  "sessionLength": 71,
+  "naturalsOnly": true
+}
+```
+
+---
+
+# 46. Table: note_attempts
+
+Store individual attempts.
+
+```sql
+note_attempts
+
+id bigint generated always as identity primary key
+
+session_id uuid references training_sessions(id)
+user_id uuid references auth.users(id)
+
+target_midi int
+played_midi int
+
+correct boolean
+
+first_attempt boolean
+
+response_ms int
+
+velocity int null
+input_source text
+
+sequence_index int
+
+created_at timestamptz
+```
+
+Important:
+
+One displayed target may produce several note_attempt rows.
+
+Example:
+
+Target A4.
+
+User:
+
+```txt
+G4 ❌
+A4 ✅
+```
+
+Store both attempts.
+
+---
+
+# 47. Table: user_note_stats
+
+This table should contain aggregated data per pitch.
+
+```sql
+user_note_stats
+
+id uuid primary key
+user_id uuid references auth.users(id)
+
+midi int
+
+attempt_count int
+correct_count int
+incorrect_count int
+
+average_response_ms numeric
+best_response_ms numeric
+
+recent_average_response_ms numeric
+
+last_seen_at timestamptz
+
+created_at timestamptz
+updated_at timestamptz
+```
+
+Unique:
+
+```txt
+(user_id, midi)
+```
+
+This makes adaptive selection fast.
+
+---
+
+# 48. Database Indexes
+
+At minimum:
+
+```sql
+training_sessions(user_id, created_at desc)
+
+note_attempts(user_id, created_at desc)
+
+note_attempts(session_id)
+
+note_attempts(user_id, target_midi)
+
+user_note_stats(user_id, midi)
+```
+
+---
+
+# 49. Row Level Security
+
+Every user-owned table must have RLS enabled.
+
+User should only:
+
+```txt
+SELECT their own rows
+INSERT their own rows
+UPDATE their own rows
+DELETE their own rows where appropriate
+```
+
+Use:
+
+```sql
+auth.uid() = user_id
+```
+
+Do not use service-role keys in browser code.
+
+Never expose:
+
+```txt
+SUPABASE_SERVICE_ROLE_KEY
+```
+
+to the client.
+
+---
+
+# 50. Client vs Server Responsibilities
+
+Client:
+
+* Training loop
+* VexFlow rendering
+* MIDI input
+* Touch input
+* Computer keyboard input
+* Audio
+* Low-latency timing
+* In-session state
+
+Server/Supabase:
+
+* Authentication
+* Persistence
+* Historical stats
+* Session summaries
+* Dashboard queries
+
+Do NOT send a network request after every MIDI event if avoidable.
+
+Training must remain responsive even with slow internet.
+
+---
+
+# 51. Session Persistence Strategy
+
+During training:
+
+Keep attempts locally in memory.
+
+Example:
+
+```ts
+const attempts: Attempt[] = []
+```
+
+At session completion:
+
+Batch insert attempts into Supabase.
+
+Also persist session summary.
+
+This prevents network latency from interfering with training.
+
+Optionally periodically checkpoint longer sessions later.
+
+---
+
+# 52. Offline / Connection Failure
+
+If Supabase save fails:
+
+Do not lose the completed session.
+
+Store unsynced session locally.
+
+Example:
+
+```txt
+localStorage / IndexedDB
+```
+
+Mark:
+
+```txt
+syncStatus = pending
+```
+
+Retry later.
+
+This can be Phase 2 if necessary.
+
+---
+
+# 53. Application State
+
+Prefer normal React state/hooks initially.
+
+Game session state example:
+
+```ts
+type TrainingSessionState = {
+  status: "idle" | "countdown" | "running" | "completed"
+
+  notes: MusicNote[]
+  currentIndex: number
+
+  correct: number
+  incorrect: number
+
+  attempts: NoteAttempt[]
+
+  currentNoteShownAt: number | null
+}
+```
+
+Do not add global state library unless state becomes genuinely difficult to manage.
+
+---
+
+# 54. Core Directory Structure
+
+Recommended:
+
+```txt
+src/
+
+  app/
+    page.tsx
+
+    train/
+      page.tsx
+
+      reflex/
+        page.tsx
+
+      sheet/
+        page.tsx
+
+    dashboard/
+      page.tsx
+
+    settings/
+      page.tsx
+
+    login/
+      page.tsx
+
+    signup/
+      page.tsx
+
+
+  components/
+
+    music/
+      MusicStaff.tsx
+      SingleNoteStaff.tsx
+      SheetStaff.tsx
+      PianoKeyboard.tsx
+
+    training/
+      ReflexTrainer.tsx
+      SheetTrainer.tsx
+      SessionConfig.tsx
+      SessionResult.tsx
+
+    midi/
+      MidiConnectButton.tsx
+      MidiDeviceSelector.tsx
+
+    dashboard/
+      ProgressChart.tsx
+      AccuracyChart.tsx
+      NoteHeatmap.tsx
+
+    ui/
+
+
+  core/
+
+    music/
+      notes.ts
+      midi.ts
+      clefs.ts
+      intervals.ts
+
+    training/
+      noteGenerator.ts
+      adaptiveGenerator.ts
+      scoring.ts
+      session.ts
+      statistics.ts
+
+    input/
+      types.ts
+      MidiInputProvider.ts
+      KeyboardInputProvider.ts
+      TouchInputProvider.ts
+
+    audio/
+      AudioEngine.ts
+      ToneAudioEngine.ts
+
+
+  hooks/
+    useMidi.ts
+    useAudio.ts
+    useTrainingSession.ts
+
+
+  lib/
+
+    supabase/
+      client.ts
+      server.ts
+
+    utils/
+
+
+  types/
+    music.ts
+    training.ts
+    database.ts
+```
+
+Exact structure may be adjusted if Codex finds a cleaner implementation, but preserve module separation.
+
+---
+
+# 55. Performance Requirements
+
+Reaction timing should not depend on:
+
+* Supabase
+* React rerender latency
+* network calls
+
+Use high-resolution browser timing.
+
+Keep MIDI event path short:
+
+```txt
+MIDI event
+→ normalize
+→ session engine
+→ correctness
+→ feedback
+```
+
+Avoid unnecessary async work in this path.
+
+---
+
+# 56. MIDI Latency
+
+Use the MIDI event timestamp where appropriate.
+
+Record both if useful:
+
+```txt
+event.timeStamp
+performance.now()
+```
+
+Do not send MIDI data to the server before judging an answer.
+
+Correctness must be determined locally.
+
+---
+
+# 57. Accessibility
+
+Include:
+
+* keyboard navigable controls
+* proper button labels
+* sufficient contrast
+* reduced-motion friendly behavior
+
+Do not rely entirely on red/green color to communicate correctness.
+
+Use optional symbols:
+
+```txt
+✓
+✕
+```
+
+---
+
+# 58. Visual Design
+
+Style:
+
+```txt
+Minimal
+Modern
+Focused
+Music-learning oriented
+```
+
+Avoid gamification overload.
+
+Preferred visual hierarchy:
+
+* staff is the primary focus
+* piano second
+* statistics secondary
+
+Use clean cards and generous spacing.
+
+Dark mode can be supported.
+
+---
+
+# 59. Theme
+
+Support:
+
+```txt
+System
+Light
+Dark
+```
+
+Music notation must remain highly readable in every theme.
+
+Do not render black notation on dark backgrounds.
+
+---
+
+# 60. Game Feedback Philosophy
+
+Do not create distracting:
+
+* confetti after every answer
+* large modal dialogs
+* excessive sound effects
+* long animations
+
+Sight-reading training relies on maintaining flow.
+
+Correct response feedback should be almost instantaneous.
+
+---
+
+# 61. Settings
+
+User settings:
+
+```txt
+Theme
+
+Default clef
+
+Default note range
+
+Default session length
+
+Sound on/off
+
+Sound volume
+
+Correct-answer sound
+
+MIDI auto-reconnect
+
+Preferred MIDI device
+
+Computer keyboard input
+
+Show note name after mistake
+
+Adaptive training
+```
+
+---
+
+# 62. Note Naming
+
+Support selectable naming convention later:
+
+```txt
+C D E F G A B
+```
+
+Future:
+
+```txt
+Do Re Mi Fa Sol La Ti
+```
+
+Internal representation must NEVER depend on displayed naming convention.
+
+Use MIDI internally.
+
+---
+
+# 63. Accidentals
+
+V1:
+
+```txt
+Naturals only
+```
+
+Architecture should support:
+
+```txt
+sharp
+flat
+natural
+```
+
+later.
+
+Do not hardcode natural-only assumptions inside core music models.
+
+---
+
+# 64. Clefs
+
+V1:
+
+```txt
+Treble
+```
+
+Future:
+
+```txt
+Bass
+```
+
+Later:
+
+```txt
+Grand Staff
+```
+
+All generator and rendering APIs should accept clef as configuration even if treble is initially the only visible option.
+
+---
+
+# 65. Rhythm
+
+V1 Reflex:
+
+No rhythm required.
+
+V1 Sheet:
+
+Quarter notes only is acceptable.
+
+Architecture should later support:
+
+```txt
+whole
+half
+quarter
+eighth
+sixteenth
+
+rests
+ties
+dots
+```
+
+Represent musical duration separately from pitch.
+
+Future type:
+
+```ts
+type ScoreNote = {
+  note: MusicNote
+  duration: "w" | "h" | "q" | "8" | "16"
+  dotted?: boolean
+}
+```
+
+---
+
+# 66. Training Difficulty
+
+Suggested presets.
+
+Beginner:
+
+```txt
+Staff only
+Naturals
+Treble
+```
+
+Intermediate:
+
+```txt
+Staff + 1 ledger
+```
+
+Advanced:
+
+```txt
+Staff + 3 ledgers
+```
+
+Custom:
+
+User selects range.
+
+Do NOT lock users behind artificial level progression.
+
+---
+
+# 67. Weak Note Detection
+
+A note should be considered weak if one or both are significantly worse than the user's average:
+
+```txt
+reaction time
+accuracy
+```
+
+Do not define weakness purely by mistakes.
+
+Example:
+
+```txt
+A5
+100% accuracy
+1.6 sec average
+```
+
+This is still a weak note compared with:
+
+```txt
+E5
+100%
+0.35 sec
+```
+
+---
+
+# 68. Median Response Time
+
+Always calculate median in addition to average.
+
+Reason:
+
+One distraction may create:
+
+```txt
+8,000 ms
+```
+
+and distort average.
+
+Dashboard should emphasize:
+
+```txt
+Average
+Median
+```
+
+---
+
+# 69. Outliers
+
+Keep raw data.
+
+Do NOT silently delete slow responses.
+
+For analytics displays, optional trimmed averages may be introduced later.
+
+Raw data remains authoritative.
+
+---
+
+# 70. Session Countdown
+
+Optional:
+
+```txt
+3
+2
+1
+Start
+```
+
+The first note timer must begin only once the note is actually visible.
+
+---
+
+# 71. Session Pause
+
+Provide pause.
+
+When paused:
+
+* reaction timer stops
+* note remains or becomes hidden based on UI decision
+* MIDI input should not count as answer
+
+On resume:
+
+Restart timer for current note rather than counting paused duration.
+
+---
+
+# 72. Fullscreen Training
+
+Provide optional:
+
+```txt
+Focus Mode
+```
+
+which hides:
+
+* navigation
+* dashboard links
+* unnecessary UI
+
+Staff and piano become larger.
+
+---
+
+# 73. Analytics Events
+
+Do not add third-party analytics initially.
+
+If analytics are introduced later, do not record raw MIDI performance unnecessarily in third-party tracking systems.
+
+Training data belongs in Supabase.
+
+---
+
+# 74. Error Handling
+
+Handle gracefully:
+
+```txt
+Supabase unavailable
+MIDI permission denied
+MIDI disconnected
+Audio failed to load
+VexFlow rendering error
+Browser unsupported
+```
+
+Training should still work with reduced features whenever possible.
+
+Example:
+
+MIDI fails → virtual piano remains available.
+
+Audio fails → visual training remains available.
+
+---
+
+# 75. Browser Priority
+
+Priority:
+
+1. Chrome desktop
+2. Edge desktop
+3. Other desktop browsers
+4. Tablet/mobile
+
+MIDI should be feature-detected.
+
+Do not assume MIDI works everywhere.
+
+Core training must work without MIDI.
+
+---
+
+# 76. Vercel Deployment
+
+Application should be directly deployable to Vercel.
+
+Required environment variables:
+
+```txt
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+```
+
+Add:
+
+```txt
+.env.example
+```
+
+Never commit:
+
+```txt
+.env.local
+```
+
+---
+
+# 77. Supabase Setup
+
+Create:
+
+```txt
+supabase/
+  migrations/
+```
+
+Store database schema as migrations.
+
+Do not rely only on manually clicking in Supabase Dashboard.
+
+Database should be reproducible.
+
+Include:
+
+* tables
+* indexes
+* triggers if needed
+* RLS policies
+
+---
+
+# 78. Generated Database Types
+
+Generate Supabase database TypeScript types.
+
+Example location:
+
+```txt
+src/types/database.ts
+```
+
+Use those types for database operations where practical.
+
+Avoid excessive `any`.
+
+---
+
+# 79. Testing
+
+Use unit tests for pure logic.
+
+Important test targets:
+
+```txt
+MIDI → note conversion
+note → MIDI conversion
+note generator ranges
+adaptive weighting
+scoring
+reaction timing calculations
+statistics
+median calculation
+ledger-line classification
+```
+
+UI tests are secondary.
+
+Do not spend more time creating an enormous test suite than building V1.
+
+---
+
+# 80. MIDI Parser Tests
+
+Test:
+
+```txt
+Note On
+Note Off
+Note On velocity 0
+Different MIDI channels
+Malformed/short message
+```
+
+---
+
+# 81. Initial Development Phases
+
+## Phase 1 — Core Music Engine
+
+Implement:
+
+* MusicNote model
+* MIDI conversion
+* Clef config
+* Note generator
+* Unit tests
+
+No Supabase required yet.
+
+---
+
+## Phase 2 — Staff Rendering
+
+Implement:
+
+* VexFlow
+* Single note
+* Treble clef
+* Ledger lines
+* Responsive SVG
+
+Build a small debug page if helpful.
+
+---
+
+## Phase 3 — Reflex Trainer
+
+Implement:
+
+* Random notes
+* virtual piano
+* timing
+* accuracy
+* session results
+* 25/50/71/100 note sessions
+
+At this stage the application should already be useful.
+
+---
+
+## Phase 4 — Audio
+
+Implement:
+
+* Tone.js
+* AudioEngine abstraction
+* velocity-aware playback
+* volume control
+
+Start with lightweight synth.
+
+---
+
+## Phase 5 — Sheet Reading
+
+Implement:
+
+* multiple notes
+* measures
+* current-note cursor
+* quarter-note sequences
+* sheet session results
+
+---
+
+## Phase 6 — Supabase
+
+Implement:
+
+* Auth
+* profiles
+* preferences
+* sessions
+* note attempts
+* note stats
+* RLS
+* migrations
+
+Anonymous/guest training must still work.
+
+---
+
+## Phase 7 — Dashboard
+
+Implement:
+
+* history
+* average speed
+* accuracy
+* weak notes
+* heatmap
+
+---
+
+## Phase 8 — MIDI
+
+Implement:
+
+* Web MIDI detection
+* permission request
+* device selector
+* input normalization
+* Note On/Off
+* velocity
+* reconnect/disconnect
+
+This should integrate into existing InputProvider architecture without changing training logic.
+
+---
+
+## Phase 9 — Adaptive Training
+
+Implement:
+
+* note performance aggregation
+* weak-note scoring
+* weighted selection
+* "Practice Weak Notes"
+
+---
+
+# 82. Important MVP Acceptance Criteria
+
+The MVP is successful when:
+
+1. User can open the website.
+2. User can start training without creating an account.
+3. A treble-clef note is rendered correctly.
+4. Ledger-line notes render correctly.
+5. User can answer using the virtual keyboard.
+6. Application detects correct and incorrect notes.
+7. Reaction time is recorded.
+8. Session can contain 71 notes.
+9. Results show average response time.
+10. Results show accuracy.
+11. Results identify slow/weak notes.
+12. User can choose staff/ledger range.
+13. App works after Vercel deployment.
+14. Signed-in users can save their history.
+15. Data cannot be read by another user.
+
+---
+
+# 83. MIDI Acceptance Criteria
+
+MIDI feature is successful when:
+
+1. Browser detects Web MIDI capability.
+2. User clicks Connect MIDI.
+3. Permission is requested.
+4. Available MIDI devices appear.
+5. User selects keyboard.
+6. Playing C4 produces MIDI 60.
+7. Velocity is captured.
+8. Correct note advances Reflex Trainer.
+9. Wrong note is recorded.
+10. Disconnecting device does not crash app.
+11. User can switch back to virtual piano.
+
+---
+
+# 84. Performance Target
+
+For local note judging:
+
+Aim for effectively immediate feedback.
+
+Do not artificially delay correctness processing.
+
+Visual feedback should ideally occur within the next browser frame after input.
+
+Audio latency depends on browser/device and should not block scoring.
+
+---
+
+# 85. Important Coding Rules
+
+Codex should follow these rules:
+
+* Strict TypeScript.
+* Avoid `any`.
+* Keep components reasonably small.
+* Put music logic outside React components.
+* Put database logic outside visual components.
+* Do not duplicate MIDI/note conversion functions.
+* Do not tightly couple VexFlow with session state.
+* Do not tightly couple Tone.js with training state.
+* Do not require authentication for practice.
+* Do not query Supabase during every note answer.
+* Do not store secret Supabase keys client-side.
+* Enable RLS.
+* Use feature detection for Web MIDI.
+* Preserve raw attempt data.
+* Keep V1 simple.
+
+---
+
+# 86. UX Principle
+
+The core training loop should be:
+
+```txt
+SEE
+ ↓
+RECOGNIZE
+ ↓
+PLAY
+ ↓
+IMMEDIATE FEEDBACK
+ ↓
+NEXT
+```
+
+There should be almost no friction between notes.
+
+The application is a musical training tool first and a dashboard second.
+
+---
+
+# 87. Long-Term Roadmap
+
+After V1:
+
+## V1.1
+
+* Bass clef
+* custom note range
+* better ledger drills
+* weak-note sessions
+* improved MIDI settings
+
+## V1.2
+
+* Interval recognition
+* scale patterns
+* arpeggios
+* pattern-based generation
+
+## V1.3
+
+* Rhythm
+* metronome
+* rests
+* eighth notes
+* continuous performance mode
+
+## V1.4
+
+* Grand staff
+* two-hand reading
+* chords
+* simultaneous MIDI notes
+
+## V1.5
+
+* Real piano sampler
+* sustain pedal
+* dynamics
+* articulation
+
+## V2
+
+* Procedurally generated musical exercises
+* difficulty curriculum
+* personalized adaptive training
+* sight-reading score
+* read-ahead training
+* pattern recognition analytics
+* optional MusicXML import
+
+---
+
+# 88. Future Read-Ahead Training
+
+Eventually create exercises that prevent the user from focusing exclusively on the current note.
+
+Possible mechanism:
+
+Current sounding note:
+
+```txt
+3
+```
+
+Eye focus target:
+
+```txt
+5
+```
+
+The application can visually encourage looking 1–4 notes ahead.
+
+This is important for advanced sight-reading but is NOT part of the initial MVP.
+
+---
+
+# 89. Future MusicXML
+
+Do not implement now.
+
+But avoid making SheetTrainer dependent entirely on randomly generated notes.
+
+Eventually it should accept a generic score representation.
+
+Example:
+
+```ts
+type Score = {
+  measures: Measure[]
+}
+```
+
+Then sources can eventually include:
+
+```txt
+GeneratedScore
+MusicXMLScore
+UploadedExercise
+```
+
+---
+
+# 90. Product Philosophy
+
+Do not optimize only for:
+
+```txt
+"How quickly can the user name C, D, E?"
+```
+
+Optimize for:
+
+```txt
+"How quickly can visual notation produce the correct physical musical response?"
+```
+
+Eventually the user should not need to verbally identify every note.
+
+The application should support the transition from:
+
+absolute note recognition
+
+to:
+
+interval recognition
+
+to:
+
+pattern recognition
+
+to:
+
+continuous sight-reading.
+
+---
+
+# 91. First Coding Task
+
+Start with Phase 1–3 only.
+
+Do NOT attempt to build every roadmap feature immediately.
+
+Create:
+
+1. Next.js project
+2. TypeScript
+3. Tailwind
+4. Basic design system
+5. MusicNote/MIDI utilities
+6. VexFlow MusicStaff component
+7. Reflex Trainer
+8. Virtual piano input
+9. Reaction timer
+10. 71-note session
+11. Result screen
+12. Weak-note calculation
+
+Use local in-memory state initially.
+
+After this is working cleanly, proceed to Supabase persistence.
+
+---
+
+# 92. Definition of First Usable Build
+
+The first build should allow me to:
+
+1. Visit `/train/reflex`
+2. Select Treble Clef
+3. Select a note range including ledger lines
+4. Select 71 notes
+5. Press Start
+6. See one randomly generated note
+7. Play the answer using an on-screen piano
+8. Receive immediate correct/incorrect feedback
+9. Continue through all 71 notes
+10. Finish the session
+11. See:
+
+```txt
+Accuracy
+Average response
+Median response
+Best response
+Slowest notes
+Most-missed notes
+```
+
+12. Click:
+
+```txt
+Practice Weak Notes
+```
+
+and immediately launch another session weighted toward my weak notes.
+
+Once this works reliably, continue implementing Supabase and MIDI support.
+
+---
+
+# 93. Final Instruction to Codex
+
+Before writing large amounts of code:
+
+1. Inspect the existing repository.
+2. Create a concise implementation plan.
+3. Identify existing project conventions.
+4. Do not overwrite unrelated code.
+5. Implement in small coherent steps.
+6. Run lint/typecheck/tests after meaningful changes.
+7. Fix TypeScript errors rather than suppressing them.
+8. Keep the architecture modular.
+9. Prioritize a working training loop over decorative UI.
+10. If a library API differs from this specification because its current version has changed, use the current documented API while preserving the architecture and behavior described in this specification.
+
+After completing the first usable build, report:
+
+* Files created/changed
+* Architecture decisions
+* How to run locally
+* Remaining TODOs
+* Any known browser limitations
+
+
+####
+Aim to create with PWA standalone installation if Possible
