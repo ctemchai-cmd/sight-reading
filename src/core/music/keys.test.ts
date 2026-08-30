@@ -19,6 +19,35 @@ describe("key signatures", () => {
     }
   });
 
+  it("matches the textbook signature for every key", () => {
+    // Written out from the standard order of sharps (F C G D A E B) and flats
+    // (B E A D G C F), so the derivation is checked against the answer rather
+    // than against itself.
+    const expected: Record<KeyName, string[]> = {
+      C: [],
+      G: ["F#"],
+      D: ["F#", "C#"],
+      A: ["F#", "C#", "G#"],
+      E: ["F#", "C#", "G#", "D#"],
+      B: ["F#", "C#", "G#", "D#", "A#"],
+      "F#": ["F#", "C#", "G#", "D#", "A#", "E#"],
+      F: ["Bb"],
+      Bb: ["Bb", "Eb"],
+      Eb: ["Bb", "Eb", "Ab"],
+      Ab: ["Bb", "Eb", "Ab", "Db"],
+      Db: ["Bb", "Eb", "Ab", "Db", "Gb"],
+      Gb: ["Bb", "Eb", "Ab", "Db", "Gb", "Cb"],
+    };
+
+    for (const [key, signature] of Object.entries(expected) as Array<[KeyName, string[]]>) {
+      const written = scaleDegrees(key)
+        .filter((degree) => degree.accidental !== "natural")
+        .map((degree) => `${degree.letter}${degree.accidental === "sharp" ? "#" : "b"}`)
+        .sort();
+      expect(written, `${key} major`).toEqual([...signature].sort());
+    }
+  });
+
   it("derives the accidentals of the signature", () => {
     expect(scaleDegrees("C").every((degree) => degree.accidental === "natural")).toBe(true);
     expect(scaleDegrees("G").find((degree) => degree.letter === "F")?.accidental).toBe("sharp");
