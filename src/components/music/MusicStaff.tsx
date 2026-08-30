@@ -256,44 +256,57 @@ export function MusicStaff({
     context.setStrokeStyle(INK);
 
     const usableWidth = width / scale - 28;
-    const measureWidth = usableWidth / Math.min(measuresPerRow, measureCount);
-    for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
-      const start = measureIndex * 4;
-      const targets = notes.slice(start, start + 4);
-      const rowIndex = Math.floor(measureIndex / measuresPerRow);
-      const columnIndex = measureIndex % measuresPerRow;
-      const startsRow = columnIndex === 0;
-      const stave = new Stave(
-        14 + columnIndex * measureWidth,
-        (compactLandscape ? 10 : 18) + rowIndex * rowHeight,
-        measureWidth,
-      );
-      if (startsRow) stave.addClef("treble").addKeySignature(keySignature);
+    const topOffset = compactLandscape ? 10 : 18;
+
+    // A clef, key signature and time signature eat into the measure that carries
+    // them. Ask each stave how much it takes rather than guessing, then hand
+    // every measure in the row the same amount of room for its notes — otherwise
+    // the first one crams four notes into whatever the signature left behind.
+    const staves = Array.from({ length: measureCount }, (_, measureIndex) => {
+      const stave = new Stave(0, 0, usableWidth);
+      if (measureIndex % measuresPerRow === 0) stave.addClef("treble").addKeySignature(keySignature);
       if (measureIndex === 0) stave.addTimeSignature("4/4");
-      stave.setContext(context).draw();
-      const vexNotes = targets.map((target, localIndex) => {
-        const index = start + localIndex;
-        const color =
-          index === currentIndex
-            ? feedback === "incorrect"
-              ? INCORRECT
-              : CORRECT
-            : index < currentIndex
-              ? SHEET_PLAYED
-              : INK;
-        return createVexNote(target, color, keySignature);
-      });
-      const voice = new Voice({ numBeats: targets.length, beatValue: 4 }).addTickables(vexNotes);
-      new Formatter()
-        .joinVoices([voice])
-        .format([voice], Math.max(80, measureWidth - (startsRow ? (measureIndex === 0 ? 86 : 64) : 34)));
-      voice.draw(context, stave);
+      return stave.setContext(context);
+    });
+    const prefixes = staves.map((stave) => stave.getNoteStartX() - stave.getX());
+
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      const firstInRow = rowIndex * measuresPerRow;
+      const inRow = Math.min(measuresPerRow, measureCount - firstInRow);
+      const rowPrefix = prefixes.slice(firstInRow, firstInRow + inRow).reduce((sum, px) => sum + px, 0);
+      const noteSpace = (usableWidth - rowPrefix) / inRow;
+      let x = 14;
+
+      for (let column = 0; column < inRow; column += 1) {
+        const measureIndex = firstInRow + column;
+        const start = measureIndex * 4;
+        const targets = notes.slice(start, start + 4);
+        const stave = staves[measureIndex];
+        stave.setX(x).setY(topOffset + rowIndex * rowHeight).setWidth(prefixes[measureIndex] + noteSpace);
+        stave.draw();
+
+        const vexNotes = targets.map((target, localIndex) => {
+          const index = start + localIndex;
+          const color =
+            index === currentIndex
+              ? feedback === "incorrect"
+                ? INCORRECT
+                : CORRECT
+              : index < currentIndex
+                ? SHEET_PLAYED
+                : INK;
+          return createVexNote(target, color, keySignature);
+        });
+        const voice = new Voice({ numBeats: targets.length, beatValue: 4 }).addTickables(vexNotes);
+        new Formatter().joinVoices([voice]).format([voice], Math.max(60, noteSpace - 14));
+        voice.draw(context, stave);
+        x += prefixes[measureIndex] + noteSpace;
+      }
     }
 
     // Several systems will not fit at once, so keep the cursor's line in view.
     const view = containerRef.current;
     if (view) {
-      const topOffset = compactLandscape ? 10 : 18;
       const rowTop = (topOffset + Math.floor(Math.floor(currentIndex / 4) / measuresPerRow) * rowHeight) * scale;
       const rowBottom = rowTop + rowHeight * scale;
       if (rowTop < view.scrollTop) view.scrollTop = Math.max(0, rowTop - 6);
