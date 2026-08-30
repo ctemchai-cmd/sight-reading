@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cn, formatMilliseconds } from "@/lib/utils";
 import { summarisePractice } from "@/core/training/practiceHistory";
+import { loadNoteHistory } from "@/lib/noteStats";
 import { flushPendingSessions } from "@/lib/sessionPersistence";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { WeakNoteStat } from "@/types/training";
@@ -34,15 +35,6 @@ interface CloudSessionRow {
   median_response_ms: number | null;
 }
 
-interface CloudStatRow {
-  midi: number;
-  trial_count: number;
-  first_try_correct_count: number;
-  incorrect_attempt_count: number;
-  average_response_ms: number | null;
-  median_response_ms: number | null;
-  best_response_ms: number | null;
-}
 
 export function Dashboard() {
   const router = useRouter();
@@ -60,9 +52,9 @@ export function Dashboard() {
     setCloudUser(user?.email ?? null);
 
     if (supabase && user) {
-      const [{ data: cloudSessions }, { data: cloudStats }] = await Promise.all([
+      const [{ data: cloudSessions }, history] = await Promise.all([
         supabase.from("training_sessions").select("id,mode,completed_at,completed_targets,accuracy,average_response_ms,median_response_ms").order("completed_at", { ascending: false }),
-        supabase.from("user_note_stats").select("midi,trial_count,first_try_correct_count,incorrect_attempt_count,average_response_ms,median_response_ms,best_response_ms"),
+        loadNoteHistory(),
       ]);
       const rows = (cloudSessions ?? []) as unknown as CloudSessionRow[];
       setSessions(rows.map((row) => ({
@@ -74,17 +66,7 @@ export function Dashboard() {
         averageResponseMs: row.average_response_ms === null ? null : Number(row.average_response_ms),
         medianResponseMs: row.median_response_ms === null ? null : Number(row.median_response_ms),
       })));
-      setNoteStats(((cloudStats ?? []) as unknown as CloudStatRow[]).map((row) => ({
-        midi: row.midi,
-        trialCount: row.trial_count,
-        firstTryCorrectCount: row.first_try_correct_count,
-        incorrectAttemptCount: row.incorrect_attempt_count,
-        firstTryAccuracy: row.trial_count ? row.first_try_correct_count / row.trial_count : 0,
-        averageResponseMs: Number(row.average_response_ms ?? 0),
-        medianResponseMs: Number(row.median_response_ms ?? 0),
-        bestResponseMs: Number(row.best_response_ms ?? 0),
-        weakScore: 1,
-      })));
+      setNoteStats(history);
     } else {
       setSessions([]);
       setNoteStats([]);
@@ -176,7 +158,7 @@ export function Dashboard() {
       ) : (
         <div className="mt-6 grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
           <Card className="min-w-0 p-4 sm:p-5"><h2 className="font-semibold text-white">Average response over sessions</h2><div className="mt-5 h-64 sm:h-72"><ResponsiveContainer width="100%" height="100%"><LineChart data={trend}><CartesianGrid stroke="#1e293b" vertical={false} /><XAxis dataKey="session" stroke="#64748b" /><YAxis stroke="#64748b" unit="ms" width={52} /><Tooltip contentStyle={{ background: "#0f172a", borderColor: "#334155", borderRadius: 12 }} /><Line type="monotone" dataKey="speed" stroke="#2dd4bf" strokeWidth={3} dot={false} /></LineChart></ResponsiveContainer></div></Card>
-          <Card className="p-5"><h2 className="font-semibold text-white">Weakest notes</h2><div className="mt-4 space-y-3">{[...noteStats].sort((a, b) => b.medianResponseMs - a.medianResponseMs || a.firstTryAccuracy - b.firstTryAccuracy).slice(0, 6).map((stat) => <div key={stat.midi} className="flex items-center justify-between rounded-xl bg-slate-950/60 p-3"><span className="font-semibold text-white">{formatNoteName(midiToNotatedPitch(stat.midi))}</span><span className="text-right text-sm text-slate-400">{formatMilliseconds(stat.medianResponseMs)}<span className="block text-xs">{Math.round(stat.firstTryAccuracy * 100)}%</span></span></div>)}</div></Card>
+          <Card className="p-5"><h2 className="font-semibold text-white">Weakest notes</h2><div className="mt-4 space-y-3">{[...noteStats].sort((a, b) => b.weakScore - a.weakScore).slice(0, 6).map((stat) => <div key={stat.midi} className="flex items-center justify-between rounded-xl bg-slate-950/60 p-3"><span className="font-semibold text-white">{formatNoteName(midiToNotatedPitch(stat.midi))}</span><span className="text-right text-sm text-slate-400">{formatMilliseconds(stat.medianResponseMs)}<span className="block text-xs">{Math.round(stat.firstTryAccuracy * 100)}%</span></span></div>)}</div></Card>
         </div>
       )}
 

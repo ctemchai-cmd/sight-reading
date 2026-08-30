@@ -12,12 +12,13 @@ import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/k
 import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
 import { formatClef, resolveRange } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
-import { calculateWeakNoteStats, summarizeTraining } from "@/core/training/scoring";
+import { calculateWeakNoteStats, mergeNoteStats, summarizeTraining } from "@/core/training/scoring";
 import { applyInputToTrial, createOpenTrial, type OpenTrial } from "@/core/training/session";
 import { computerKeyboardGuide, useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useAudio } from "@/hooks/useAudio";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { useMidi } from "@/hooks/useMidi";
+import { loadNoteHistory } from "@/lib/noteStats";
 import { persistTrainingSession } from "@/lib/sessionPersistence";
 import { loadLocalPreferences } from "@/lib/preferences";
 import type { Clef, KeyName, TargetNote, RangePreset } from "@/types/music";
@@ -28,6 +29,7 @@ import type {
   TrainingSessionRecord,
   TrainingSummary,
   TrainingTrial,
+  WeakNoteStat,
 } from "@/types/training";
 
 type Phase = "configure" | "running" | "paused" | "complete";
@@ -78,6 +80,8 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const streamIndexRef = useRef(0);
   const [trials, setTrials] = useState<TrainingTrial[]>([]);
   const trialsRef = useRef<TrainingTrial[]>([]);
+  // What the player has been weak at across every past session.
+  const historyRef = useRef<WeakNoteStat[]>([]);
   const openTrialRef = useRef<OpenTrial | null>(null);
   const generatorRef = useRef<NoteGenerator | null>(null);
   const [feedback, setFeedback] = useState<"correct" | "incorrect" | null>(null);
@@ -97,6 +101,16 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   useEffect(() => {
     configRef.current = config;
   }, [config]);
+
+  useEffect(() => {
+    let active = true;
+    void loadNoteHistory().then((stats) => {
+      if (active) historyRef.current = stats;
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -141,7 +155,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const extendStream = useCallback((throughIndex: number) => {
     const generator = generatorRef.current;
     if (!generator) return;
-    const stats = calculateWeakNoteStats(trialsRef.current);
+    const stats = mergeNoteStats(historyRef.current, calculateWeakNoteStats(trialsRef.current));
     const next = [...streamRef.current];
     while (next.length < throughIndex + STREAM_LOOKAHEAD) next.push(generator.generate(stats));
     if (next.length === streamRef.current.length) return;
