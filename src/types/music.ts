@@ -1,6 +1,21 @@
 export type NoteLetter = "C" | "D" | "E" | "F" | "G" | "A" | "B";
 export type Accidental = "flat" | "natural" | "sharp";
 export type Clef = "treble" | "bass";
+/** Major keys, written the way a key signature names them. */
+export type KeyName =
+  | "C"
+  | "G"
+  | "F"
+  | "D"
+  | "Bb"
+  | "A"
+  | "Eb"
+  | "E"
+  | "Ab"
+  | "B"
+  | "Db"
+  | "F#"
+  | "Gb";
 export type MidiNumber = number;
 
 export interface NotatedPitch {

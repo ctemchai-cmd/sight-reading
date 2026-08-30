@@ -31,7 +31,9 @@ These decisions override older or broader statements elsewhere in this document 
 * A percussive filter-enveloped synth voice remains as the fallback when the sample set cannot be loaded, so training is never silent.
 * App sound stays off by default for MIDI input, because a real keyboard already makes its own sound. The tone exists for the virtual piano and the computer keyboard.
 * UI language is English for V1.
-* Treble clef and natural notes are the only scored notation in V1. The domain model must still preserve written pitch spelling separately from sounding MIDI pitch.
+* Treble clef only. Training runs in a major key chosen per session — any of the thirteen from C to six sharps or six flats, or random — and draws only notes of that key.
+* The key signature is drawn at the start of the staff and its accidentals are never repeated on the note heads. Reading the sharp or flat from the signature rather than from the note is the skill this trains: in G major a note on the top line is written F and must be played as F sharp.
+* Notes are spelled the way their key writes them, so G major reaches for F sharp and D flat major for G flat, both sounding the same key on the piano. This is why the domain model keeps written pitch spelling separate from sounding MIDI pitch, and why nothing outside `core/music/keys.ts` decides how a pitch is spelled.
 * Performance mode, native mobile applications, bass/grand staff, advanced rhythm, MusicXML, and full offline sync remain future work.
 
 ### V1 Metric Definitions
@@ -52,14 +54,14 @@ Implemented in the repository:
 
 * Next.js 16 App Router application with strict TypeScript, Tailwind CSS, 360 px responsive layouts, installable PWA metadata, production security headers, and a Vercel-compatible build.
 * Music domain types that keep written pitch spelling separate from sounding MIDI pitch.
-* Treble natural-note ranges, MIDI/note conversion, ledger classification, uniform generation, adaptive weighting, trial/attempt scoring, and first-attempt accuracy.
+* Major key signatures from C to six sharps or six flats, key-aware spelling and scale membership, treble ranges, MIDI/note conversion, ledger classification, uniform generation, adaptive weighting, trial/attempt scoring, and first-attempt accuracy.
 * Reflex Trainer as a right-to-left note stream with a fixed playhead, generated lookahead, and 25/50/71/100/endless sessions, pause, focus mode, configurable delay, ledger presets, custom MIDI range, virtual piano, computer keyboard input, results, and weak-note replay.
 * Sheet Reading runs two, four, or five lines of four 4/4 measures — sixteen quarter notes each — but shows one line at a time, replacing it with the next once it is read. A single system stays legible at full size rather than shrinking five onto a phone. Current-note highlighting, focus mode, and no advance on a wrong input all still apply, and the staff still scrolls when a narrow screen wraps one line onto several rows.
 * Responsive VexFlow 5 SVG notation that reflows sheet measures across rows on narrow screens, a piano-shaped Tone.js synth voice initialized by explicit user action, and a normalized input path.
 * Persistent navigation-level Web MIDI permission flow, device selection, connection state handling, Note On/Off parsing, velocity-zero Note Off, channel normalization, and reconnect-safe UI shared by every trainer.
 * IndexedDB pending cloud-save queue without a guest-mode bypass.
 * Private Supabase email/password Auth, protected application routes, reproducible SQL migration, RLS, transactional session RPC, aggregate per-note statistics, and retry-safe session IDs.
-* Dashboard metrics, response-time trend, weakest notes, and pitch heatmap.
+* Dashboard metrics, response-time trend, weakest notes, and a pitch heatmap that grows a cell for each sharp or flat once a key signature has put it in play.
 * Unit/component tests, desktop, 360 px portrait, and 800 × 360 landscape Chrome Playwright smoke tests with horizontal-overflow assertions, ESLint, strict typecheck, and successful Next.js production build.
 
 External setup still required before cloud features are live:
@@ -1969,18 +1971,22 @@ Use MIDI internally.
 V1:
 
 ```txt
-Naturals only
+Whatever the session's key signature carries
 ```
 
-Architecture should support:
+Sharps and flats reach the staff through the key signature, not as accidentals
+on individual note heads. A note whose accidental the signature already carries
+is drawn plain; one that contradicts the signature would need a written
+accidental, which is why `isAccidentalImplied` decides rather than an assumption
+that generated notes are always clean.
+
+Still future work:
 
 ```txt
-sharp
-flat
-natural
+accidentals written against the key
+minor keys
+modulation within a session
 ```
-
-later.
 
 Do not hardcode natural-only assumptions inside core music models.
 

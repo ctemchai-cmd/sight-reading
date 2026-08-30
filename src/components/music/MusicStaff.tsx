@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Accidental as VexAccidental,
   Formatter,
@@ -10,8 +10,9 @@ import {
   TickContext,
   Voice,
 } from "vexflow";
+import { isAccidentalImplied } from "@/core/music/keys";
 import { accidentalToVexFlow, notationToVexFlowKey } from "@/core/music/notes";
-import type { TargetNote } from "@/types/music";
+import type { KeyName, TargetNote } from "@/types/music";
 
 // The notation surface remains paper-white in every app theme, so musical ink stays dark.
 const INK = "#0f172a";
@@ -35,6 +36,7 @@ interface MusicStaffProps {
   notes: TargetNote[];
   currentIndex?: number;
   mode?: "stream" | "flash" | "sheet";
+  keySignature?: KeyName;
   feedback?: "correct" | "incorrect" | null;
   onReady?: () => void;
   /** Stream only: take the container's height and scale the notation to match. */
@@ -54,10 +56,10 @@ interface StreamGeometry {
  * notes enter from the right edge and the answered ones exit past the clef.
  * Flash mode is the degenerate case — no lookahead, no history, one centred note.
  */
-function streamGeometry(width: number, flash: boolean): StreamGeometry {
+function streamGeometry(width: number, flash: boolean, noteStartX: number): StreamGeometry {
   if (flash) return { lead: 0, trail: 0, playheadX: Math.round(width / 2), spacing: 0 };
   const lead = width < 520 ? 4 : width < 720 ? 5 : 6;
-  const playheadX = Math.max(96, Math.round(width * 0.26));
+  const playheadX = Math.max(96, noteStartX + 16, Math.round(width * 0.26));
   return {
     lead,
     trail: width < 520 ? 1 : 2,
@@ -66,14 +68,18 @@ function streamGeometry(width: number, flash: boolean): StreamGeometry {
   };
 }
 
-function createVexNote(target: TargetNote, color: string): StaveNote {
+function createVexNote(target: TargetNote, color: string, keySignature: KeyName): StaveNote {
   const note = new StaveNote({
     clef: "treble",
     keys: [notationToVexFlowKey(target.notation)],
     duration: "q",
     autoStem: true,
   });
-  const accidental = accidentalToVexFlow(target.notation);
+  // An accidental the key signature already carries is not written on the head:
+  // reading it from the signature instead is the point of practising in a key.
+  const accidental = isAccidentalImplied(keySignature, target.notation)
+    ? null
+    : accidentalToVexFlow(target.notation);
   if (accidental) note.addModifier(new VexAccidental(accidental), 0);
   note.setStyle({ fillStyle: color, strokeStyle: color });
   note.setLedgerLineStyle({ fillStyle: color, strokeStyle: color });
@@ -84,6 +90,7 @@ export function MusicStaff({
   notes,
   currentIndex = 0,
   mode = "stream",
+  keySignature = "C",
   feedback,
   onReady,
   fill = false,
@@ -102,9 +109,11 @@ export function MusicStaff({
   // Read back from the drawn note rather than recomputed, so the marker tracks
   // the head through VexFlow's own stave and formatter offsets.
   const [headCenterX, setHeadCenterX] = useState<number | null>(null);
+  // Where notes may start: past the clef and whatever the key signature draws.
+  const [noteStartX, setNoteStartX] = useState(0);
 
   const streaming = mode === "stream" || mode === "flash";
-  const geometry = useMemo(() => streamGeometry(width, mode === "flash"), [mode, width]);
+  const geometry = useMemo(() => streamGeometry(width, mode === "flash", noteStartX), [mode, noteStartX, width]);
   const filling = fill && streaming && availableHeight > 0;
   const staffHeight = filling ? availableHeight : compactLandscape ? 118 : 150;
   const scale = filling
@@ -149,8 +158,10 @@ export function MusicStaff({
     context.scale(scale, scale);
     context.setFillStyle(INK);
     context.setStrokeStyle(INK);
-    new Stave(8, staveY, innerWidth - 16).addClef("treble").setContext(context).draw();
-  }, [innerWidth, scale, staffHeight, staveY, streaming, width]);
+    const stave = new Stave(8, staveY, innerWidth - 16).addClef("treble").addKeySignature(keySignature);
+    stave.setContext(context).draw();
+    setNoteStartX(stave.getNoteStartX() * scale);
+  }, [innerWidth, keySignature, scale, staffHeight, staveY, streaming, width]);
 
   useEffect(() => {
     const layer = streamLayerRef.current;
@@ -181,7 +192,7 @@ export function MusicStaff({
               : feedback === "incorrect"
                 ? INCORRECT
                 : INK;
-      const vexNote = createVexNote(notes[index], color);
+      const vexNote = createVexNote(notes[index], color, keySignature);
       vexNote.setStave(stave).setContext(context);
       new TickContext()
         .addTickable(vexNote)
@@ -209,7 +220,7 @@ export function MusicStaff({
 
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
-  }, [currentIndex, feedback, geometry, innerWidth, mode, notes, scale, staffHeight, staveY, streaming, width]);
+  }, [currentIndex, feedback, geometry, innerWidth, keySignature, mode, notes, scale, staffHeight, staveY, streaming, width]);
 
   useEffect(() => {
     const layer = sheetLayerRef.current;
@@ -238,7 +249,7 @@ export function MusicStaff({
         (compactLandscape ? 10 : 18) + rowIndex * rowHeight,
         measureWidth,
       );
-      if (startsRow) stave.addClef("treble");
+      if (startsRow) stave.addClef("treble").addKeySignature(keySignature);
       if (measureIndex === 0) stave.addTimeSignature("4/4");
       stave.setContext(context).draw();
       const vexNotes = targets.map((target, localIndex) => {
@@ -251,7 +262,7 @@ export function MusicStaff({
             : index < currentIndex
               ? SHEET_PLAYED
               : INK;
-        return createVexNote(target, color);
+        return createVexNote(target, color, keySignature);
       });
       const voice = new Voice({ numBeats: targets.length, beatValue: 4 }).addTickables(vexNotes);
       new Formatter()
@@ -274,12 +285,15 @@ export function MusicStaff({
 
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
-  }, [compactLandscape, currentIndex, feedback, mode, notes, width]);
+  }, [compactLandscape, currentIndex, feedback, keySignature, mode, notes, width]);
 
   return (
     <div
       ref={containerRef}
-      style={streaming && !fill ? { height: staffHeight } : undefined}
+      style={{
+        ...(streaming && !fill ? { height: staffHeight } : {}),
+        ...(streaming ? ({ "--staff-fade": `${Math.round(noteStartX)}px` } as CSSProperties) : {}),
+      }}
       className={`music-staff relative w-full rounded-xl bg-white/95 ${mode === "sheet" ? "min-h-45 max-h-[55vh] overflow-y-auto overflow-x-hidden" : `overflow-hidden ${fill ? "h-full" : ""}`} ${className ?? ""}`}
       aria-label={
         streaming

@@ -114,6 +114,12 @@ export function Dashboard() {
     accuracy: Math.round(session.accuracy * 100),
   }));
   const byMidi = new Map(noteStats.map((stat) => [stat.midi, stat]));
+  // Naturals always have a cell so the shape of the keyboard stays readable;
+  // sharps and flats appear once a key signature has actually put them in play.
+  const heatmapMidis = useMemo(() => {
+    const practised = noteStats.map((stat) => stat.midi).filter((midi) => midi >= 53 && midi <= 88);
+    return [...new Set([...naturalMidisInRange(53, 88), ...practised])].sort((a, b) => a - b);
+  }, [noteStats]);
 
   const signOut = async () => {
     await getSupabaseBrowserClient()?.auth.signOut();
@@ -142,8 +148,8 @@ export function Dashboard() {
       )}
 
       <Card className="mt-5 p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-white">Treble pitch heatmap</h2><p className="mt-1 text-xs text-slate-400">F3–E6 · darker cells need more practice</p></div><div className="grid grid-cols-2 rounded-lg border border-slate-700 p-1"><button onClick={() => setHeatmapMetric("speed")} className={`rounded-md px-3 py-1 text-sm ${heatmapMetric === "speed" ? "bg-slate-700 text-white" : "text-slate-400"}`}>Response</button><button onClick={() => setHeatmapMetric("accuracy")} className={`rounded-md px-3 py-1 text-sm ${heatmapMetric === "accuracy" ? "bg-slate-700 text-white" : "text-slate-400"}`}>Accuracy</button></div></div>
-        <div className="mt-5 grid grid-cols-7 gap-1.5 xl:grid-cols-[repeat(21,minmax(0,1fr))] xl:gap-2">{naturalMidisInRange(53, 88).map((midi) => { const stat = byMidi.get(midi); const severity = !stat ? 0 : heatmapMetric === "speed" ? Math.min(1, stat.medianResponseMs / 1800) : 1 - stat.firstTryAccuracy; return <div key={midi} className="min-w-0 rounded-lg border border-slate-800 p-1.5 text-center sm:p-2" style={{ backgroundColor: stat ? `rgb(244 63 94 / ${0.08 + severity * 0.5})` : "rgb(15 23 42 / .55)" }} title={stat ? `${formatMilliseconds(stat.medianResponseMs)}, ${Math.round(stat.firstTryAccuracy * 100)}%` : "Not practiced"}><p className="truncate text-[11px] font-semibold text-white sm:text-xs">{formatNoteName(midiToNotatedPitch(midi))}</p><p className="mt-1 truncate text-[9px] text-slate-400 sm:text-[10px]">{!stat ? "—" : heatmapMetric === "speed" ? formatMilliseconds(stat.medianResponseMs) : `${Math.round(stat.firstTryAccuracy * 100)}%`}</p></div>; })}</div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-white">Treble pitch heatmap</h2><p className="mt-1 text-xs text-slate-400">F3–E6 · darker cells need more practice · sharps and flats appear once practised</p></div><div className="grid grid-cols-2 rounded-lg border border-slate-700 p-1"><button onClick={() => setHeatmapMetric("speed")} className={`rounded-md px-3 py-1 text-sm ${heatmapMetric === "speed" ? "bg-slate-700 text-white" : "text-slate-400"}`}>Response</button><button onClick={() => setHeatmapMetric("accuracy")} className={`rounded-md px-3 py-1 text-sm ${heatmapMetric === "accuracy" ? "bg-slate-700 text-white" : "text-slate-400"}`}>Accuracy</button></div></div>
+        <div className="mt-5 grid grid-cols-7 gap-1.5 sm:grid-cols-12 xl:grid-cols-[repeat(21,minmax(0,1fr))] xl:gap-2">{heatmapMidis.map((midi) => { const stat = byMidi.get(midi); const severity = !stat ? 0 : heatmapMetric === "speed" ? Math.min(1, stat.medianResponseMs / 1800) : 1 - stat.firstTryAccuracy; return <div key={midi} className="min-w-0 rounded-lg border border-slate-800 p-1.5 text-center sm:p-2" style={{ backgroundColor: stat ? `rgb(244 63 94 / ${0.08 + severity * 0.5})` : "rgb(15 23 42 / .55)" }} title={stat ? `${formatMilliseconds(stat.medianResponseMs)}, ${Math.round(stat.firstTryAccuracy * 100)}%` : "Not practiced"}><p className="truncate text-[11px] font-semibold text-white sm:text-xs">{formatNoteName(midiToNotatedPitch(midi))}</p><p className="mt-1 truncate text-[9px] text-slate-400 sm:text-[10px]">{!stat ? "—" : heatmapMetric === "speed" ? formatMilliseconds(stat.medianResponseMs) : `${Math.round(stat.firstTryAccuracy * 100)}%`}</p></div>; })}</div>
       </Card>
     </div>
   );

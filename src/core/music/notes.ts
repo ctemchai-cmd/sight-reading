@@ -1,5 +1,7 @@
+import { spellInKey } from "@/core/music/keys";
 import type {
   Accidental,
+  KeyName,
   MidiRange,
   NoteLetter,
   NotatedPitch,
@@ -76,8 +78,8 @@ export function midiToNotatedPitch(midi: number, preference: "sharp" | "flat" = 
   return { letter, accidental, octave: Math.floor(midi / 12) - 1 };
 }
 
-export function createTargetNote(midi: number, id = crypto.randomUUID()): TargetNote {
-  return { id, expectedMidi: midi, notation: midiToNotatedPitch(midi) };
+export function createTargetNote(midi: number, key: KeyName = "C", id = crypto.randomUUID()): TargetNote {
+  return { id, expectedMidi: midi, notation: spellInKey(key, midi) };
 }
 
 export function notationToVexFlowKey(note: NotatedPitch): string {

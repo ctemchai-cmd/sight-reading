@@ -8,6 +8,7 @@ import { FocusSurface } from "@/components/training/FocusSurface";
 import { SessionResult } from "@/components/training/SessionResult";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/keys";
 import { TREBLE_RANGES } from "@/core/music/notes";
 import { createQuarterNoteScore } from "@/core/music/score";
 import { NoteGenerator } from "@/core/training/noteGenerator";
@@ -18,7 +19,7 @@ import { useFocusMode } from "@/hooks/useFocusMode";
 import { useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useMidi } from "@/hooks/useMidi";
 import { persistTrainingSession } from "@/lib/sessionPersistence";
-import type { Score, TrebleRangePreset } from "@/types/music";
+import type { KeyName, Score, TrebleRangePreset } from "@/types/music";
 import type { NoteInputEvent, TrainingSessionConfig, TrainingSessionRecord, TrainingSummary, TrainingTrial } from "@/types/training";
 
 type Phase = "configure" | "running" | "paused" | "complete";
@@ -32,6 +33,8 @@ export function SheetTrainer() {
   const phaseRef = useRef<Phase>("configure");
   const [rangePreset, setRangePreset] = useState<TrebleRangePreset>("ledger-1");
   const [lines, setLines] = useState<number>(4);
+  const [keyChoice, setKeyChoice] = useState<KeyName | "random">("C");
+  const [keySignature, setKeySignature] = useState<KeyName>("C");
   const [score, setScore] = useState<Score | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const indexRef = useRef(0);
@@ -61,6 +64,7 @@ export function SheetTrainer() {
   const config = useCallback((): TrainingSessionConfig => ({
     mode: "sheet",
     clef: "treble",
+    keySignature,
     rangePreset,
     ...range,
     sessionLength: totalNotes,
@@ -69,7 +73,7 @@ export function SheetTrainer() {
     midiSoundEnabled: false,
     computerKeyboardEnabled: true,
     nextNoteDelayMs: 0,
-  }), [range, rangePreset, totalNotes]);
+  }), [keySignature, range, rangePreset, totalNotes]);
 
   const finish = useCallback(async (completedTrials: TrainingTrial[]) => {
     phaseRef.current = "complete";
@@ -121,7 +125,10 @@ export function SheetTrainer() {
 
   const start = async () => {
     await initializeAudio();
-    const generator = new NoteGenerator({ ...range, adaptive: false, avoidImmediateRepeat: true });
+    // Resolve a random choice now, so the session records the key it landed on.
+    const resolvedKey = keyChoice === "random" ? randomKey() : keyChoice;
+    setKeySignature(resolvedKey);
+    const generator = new NoteGenerator({ ...range, keySignature: resolvedKey, adaptive: false, avoidImmediateRepeat: true });
     const generated = generator.generateSequence(totalNotes);
     setScore(createQuarterNoteScore(generated));
     trialsRef.current = [];
@@ -159,6 +166,13 @@ export function SheetTrainer() {
             </select>
           </label>
           <label className="block space-y-2 text-sm text-slate-300">
+            <span>Key</span>
+            <select value={keyChoice} onChange={(event) => setKeyChoice(event.target.value as KeyName | "random")} className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white">
+              <option value="random">Random each session</option>
+              {KEY_NAMES.map((name) => <option key={name} value={name}>{formatKeyName(name)} major · {describeKey(name)}</option>)}
+            </select>
+          </label>
+          <label className="block space-y-2 text-sm text-slate-300">
             <span>Lines</span>
             <select value={lines} onChange={(event) => setLines(Number(event.target.value))} className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white">
               {LINE_CHOICES.map((count) => <option key={count} value={count}>{count} lines · {count * NOTES_PER_LINE} notes</option>)}
@@ -183,7 +197,7 @@ export function SheetTrainer() {
     >
       {!focusMode && (
       <div className="sheet-training-toolbar flex flex-wrap items-center justify-between gap-3">
-        <div><p className="text-sm font-semibold text-teal-300">SHEET READING</p><p className="text-xs text-slate-500">Quarter notes · 4/4</p></div>
+        <div><p className="text-sm font-semibold text-teal-300">SHEET READING</p><p className="text-xs text-slate-500">{formatKeyName(keySignature)} major · {describeKey(keySignature)}</p></div>
         <p className="order-3 w-full rounded-xl bg-slate-900/70 p-2 text-center text-sm text-slate-300 sm:order-none sm:w-auto sm:bg-transparent sm:p-0">Line {Math.floor(currentIndex / NOTES_PER_LINE) + 1} / {lines} · Note {currentIndex + 1} / {totalNotes} · First try {trials.length ? Math.round(trials.filter((trial) => trial.firstTryCorrect).length / trials.length * 100) : 100}%</p>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="ghost" onClick={toggleFocusMode}><Maximize2 className="size-4" /> Focus</Button>
@@ -193,7 +207,7 @@ export function SheetTrainer() {
       )}
       <Card className="sheet-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button></div>}
-        {lineNotes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={lineNotes} currentIndex={currentIndex - lineStart} mode="sheet" feedback={feedback} onReady={markReady} />}
+        {lineNotes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={lineNotes} currentIndex={currentIndex - lineStart} mode="sheet" keySignature={keySignature} feedback={feedback} onReady={markReady} />}
         <p className={`training-feedback mt-3 h-5 text-center text-sm font-semibold ${feedback === "incorrect" ? "text-rose-300" : "text-teal-300"}`} aria-live="polite">{feedback === "incorrect" ? "✕ Wrong note — stay on the current note" : feedback === "correct" ? "✓" : ""}</p>
       </Card>
       <div className="sheet-training-inputs">

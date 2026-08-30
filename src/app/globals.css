@@ -72,8 +72,8 @@ textarea,
   position: absolute;
   inset: 0;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 4.75rem, #000 calc(100% - 2rem), transparent 100%);
-  mask-image: linear-gradient(to right, transparent 0, #000 4.75rem, #000 calc(100% - 2rem), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--staff-fade, 4.75rem), #000 calc(100% - 2rem), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--staff-fade, 4.75rem), #000 calc(100% - 2rem), transparent 100%);
 }
 
 .staff-stream-window svg {
