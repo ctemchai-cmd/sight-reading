@@ -40,10 +40,10 @@ export function AuthForm({ redirectTo, serverMessage, supabaseConfigured }: Auth
   };
 
   return (
-    <div className="mx-auto max-w-md px-6 py-14">
-      <h1 className="text-3xl font-bold text-white">Private access</h1>
+    <div className="mx-auto max-w-md px-4 py-10 sm:px-6 sm:py-14">
+      <h1 className="text-3xl font-bold text-white sm:text-4xl">Private access</h1>
       <p className="mt-2 text-sm text-slate-400">Sign in with an account created by the site owner in Supabase. Public registration and guest training are disabled.</p>
-      <Card className="mt-7 p-6">
+      <Card className="mt-7 p-4 sm:p-6">
         <form className="space-y-4" onSubmit={(event) => void submit(event)}>
           <label className="block text-sm text-slate-300">Email<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white" /></label>
           <label className="block text-sm text-slate-300">Password<input required minLength={8} type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white" /></label>

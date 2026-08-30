@@ -40,15 +40,18 @@ export function PianoKeyboard({ minMidi, maxMidi, disabled, onNoteOn, onNoteOff 
   };
 
   return (
-    <div className="select-none" aria-label="Virtual piano">
-      <div className="relative flex h-48 overflow-hidden rounded-xl border border-slate-700 bg-slate-950 p-1">
+    <div className="select-none overflow-x-auto rounded-xl overscroll-x-contain" aria-label="Virtual piano">
+      <div
+        className="relative flex h-40 w-full touch-pan-x overflow-hidden rounded-xl border border-slate-700 bg-slate-950 p-1 sm:h-48"
+        style={{ minWidth: `${Math.max(320, whiteKeys.length * 42)}px` }}
+      >
         {whiteKeys.map((midi) => (
           <button
             key={midi}
             aria-label={formatNoteName(midiToNotatedPitch(midi))}
             disabled={disabled}
             className={cn(
-              "relative h-full min-w-10 flex-1 rounded-b-lg border border-slate-400 bg-slate-50 text-slate-500 shadow-inner transition-colors",
+              "relative h-full min-w-10 flex-1 touch-none rounded-b-lg border border-slate-400 bg-slate-50 text-slate-500 shadow-inner transition-colors",
               pressed.has(midi) && "bg-teal-200",
             )}
             onPointerDown={(event) => press(event, midi)}
@@ -67,7 +70,7 @@ export function PianoKeyboard({ minMidi, maxMidi, disabled, onNoteOn, onNoteOff 
               aria-label={formatNoteName(midiToNotatedPitch(midi))}
               disabled={disabled}
               className={cn(
-                "absolute top-1 z-10 h-[60%] w-[4.5%] max-w-9 -translate-x-1/2 rounded-b-md border border-black bg-slate-950 shadow-lg transition-colors",
+                "absolute top-1 z-10 h-[60%] w-[4.5%] max-w-9 touch-none -translate-x-1/2 rounded-b-md border border-black bg-slate-950 shadow-lg transition-colors",
                 pressed.has(midi) && "bg-teal-600",
               )}
               style={{ left: `${left}%` }}

@@ -131,10 +131,10 @@ export function SheetTrainer() {
 
   if (phase === "configure") {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-10">
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-300">Sheet reading</p>
-        <h1 className="mt-2 text-4xl font-bold text-white">Read ahead across four measures</h1>
-        <Card className="mt-8 space-y-6 p-6">
+        <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">Read ahead across four measures</h1>
+        <Card className="mt-7 space-y-6 p-4 sm:mt-8 sm:p-6">
           <label className="block space-y-2 text-sm text-slate-300">
             <span>Note range</span>
             <select value={rangePreset} onChange={(event) => setRangePreset(event.target.value as TrebleRangePreset)} className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white">
@@ -145,24 +145,24 @@ export function SheetTrainer() {
             </select>
           </label>
           <p className="text-sm text-slate-400">4/4 · 16 quarter notes · wrong notes do not move the cursor</p>
-          <div className="flex justify-end"><Button size="lg" onClick={() => void start()}><Play className="size-5" /> Start sheet</Button></div>
+          <div className="flex justify-end"><Button className="w-full sm:w-auto" size="lg" onClick={() => void start()}><Play className="size-5" /> Start sheet</Button></div>
         </Card>
       </div>
     );
   }
 
   if (phase === "complete" && summary) {
-    return <div className="px-6 py-10"><SessionResult summary={summary} syncStatus={saveStatus} onRetry={() => { phaseRef.current = "configure"; setPhase("configure"); }} /></div>;
+    return <div className="px-4 py-8 sm:px-6 sm:py-10"><SessionResult summary={summary} syncStatus={saveStatus} onRetry={() => { phaseRef.current = "configure"; setPhase("configure"); }} /></div>;
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 px-6 py-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-sm font-semibold text-teal-300">SHEET READING</p><p className="text-xs text-slate-500">Quarter notes · 4/4</p></div>
-        <p className="text-sm text-slate-300">Note {currentIndex + 1} / 16 · First try {trials.length ? Math.round(trials.filter((trial) => trial.firstTryCorrect).length / trials.length * 100) : 100}%</p>
+        <p className="order-3 w-full rounded-xl bg-slate-900/70 p-2 text-center text-sm text-slate-300 sm:order-none sm:w-auto sm:bg-transparent sm:p-0">Note {currentIndex + 1} / 16 · First try {trials.length ? Math.round(trials.filter((trial) => trial.firstTryCorrect).length / trials.length * 100) : 100}%</p>
         {phase === "paused" ? <Button size="sm" onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button> : <Button size="sm" variant="secondary" onClick={() => { phaseRef.current = "paused"; armedRef.current = false; openTrialRef.current = null; setPhase("paused"); }}><Pause className="size-4" /> Pause</Button>}
       </div>
-      <Card className="relative p-5">
+      <Card className="relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button></div>}
         {notes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={notes} currentIndex={currentIndex} mode="sheet" feedback={feedback} onReady={markReady} />}
         <p className={`mt-3 h-5 text-center text-sm font-semibold ${feedback === "incorrect" ? "text-rose-300" : "text-teal-300"}`} aria-live="polite">{feedback === "incorrect" ? "✕ Wrong note — stay on the current note" : feedback === "correct" ? "✓" : ""}</p>

@@ -17,12 +17,12 @@ export function AppNav() {
 
   return (
     <header className="border-b border-slate-800/80 bg-slate-950/85 backdrop-blur">
-      <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6" aria-label="Main navigation">
+      <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-3 sm:px-6" aria-label="Main navigation">
         <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-white">
           <span className="grid size-9 place-items-center rounded-xl bg-teal-400 text-slate-950">SR</span>
           <span className="hidden sm:inline">Sight Reading Trainer</span>
         </Link>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0 sm:gap-1">
           {links.map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? pathname === href : pathname.startsWith(href);
             return (
@@ -30,7 +30,7 @@ export function AppNav() {
                 key={href}
                 href={href}
                 className={cn(
-                  "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  "flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 py-2 text-sm font-medium transition-colors sm:px-3",
                   active ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-900 hover:text-white",
                 )}
               >

@@ -55,7 +55,7 @@ export function MusicStaff({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(600, Math.floor(entry.contentRect.width))));
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(280, Math.floor(entry.contentRect.width))));
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
@@ -64,7 +64,11 @@ export function MusicStaff({
     const container = containerRef.current;
     if (!container || notes.length === 0) return;
     container.replaceChildren();
-    const height = mode === "single" ? 220 : 245;
+    const measureCount = Math.ceil(notes.length / 4);
+    const measuresPerRow = width < 480 ? 1 : width < 900 ? 2 : 4;
+    const rowHeight = 150;
+    const rowCount = Math.ceil(measureCount / measuresPerRow);
+    const height = mode === "single" ? 220 : rowCount * rowHeight + 20;
     const renderer = new Renderer(container, Renderer.Backends.SVG);
     renderer.resize(width, height);
     const context = renderer.getContext();
@@ -82,14 +86,17 @@ export function MusicStaff({
       new TickContext().addTickable(vexNote).preFormat().setX(width / 2);
       vexNote.draw();
     } else {
-      const measureCount = Math.ceil(notes.length / 4);
       const usableWidth = width - 28;
-      const measureWidth = usableWidth / measureCount;
+      const measureWidth = usableWidth / Math.min(measuresPerRow, measureCount);
       for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
         const start = measureIndex * 4;
         const targets = notes.slice(start, start + 4);
-        const stave = new Stave(14 + measureIndex * measureWidth, 48, measureWidth);
-        if (measureIndex === 0) stave.addClef("treble").addTimeSignature("4/4");
+        const rowIndex = Math.floor(measureIndex / measuresPerRow);
+        const columnIndex = measureIndex % measuresPerRow;
+        const startsRow = columnIndex === 0;
+        const stave = new Stave(14 + columnIndex * measureWidth, 28 + rowIndex * rowHeight, measureWidth);
+        if (startsRow) stave.addClef("treble");
+        if (measureIndex === 0) stave.addTimeSignature("4/4");
         stave.setContext(context).draw();
         const vexNotes = targets.map((target, localIndex) => {
           const index = start + localIndex;
@@ -104,7 +111,7 @@ export function MusicStaff({
           return createVexNote(target, color);
         });
         const voice = new Voice({ numBeats: targets.length, beatValue: 4 }).addTickables(vexNotes);
-        new Formatter().joinVoices([voice]).format([voice], Math.max(80, measureWidth - (measureIndex === 0 ? 86 : 34)));
+        new Formatter().joinVoices([voice]).format([voice], Math.max(80, measureWidth - (startsRow ? (measureIndex === 0 ? 86 : 64) : 34)));
         voice.draw(context, stave);
       }
     }

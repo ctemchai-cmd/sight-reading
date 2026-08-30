@@ -193,13 +193,13 @@ export function ReflexTrainer() {
 
   if (phase === "configure") {
     return (
-      <div className="mx-auto max-w-5xl px-6 py-10">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         <div className="mb-8">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-300">Reflex trainer</p>
-          <h1 className="mt-2 text-4xl font-bold text-white">Configure your session</h1>
+          <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">Configure your session</h1>
           <p className="mt-3 text-slate-400">Treble clef · natural notes · Chrome Desktop</p>
         </div>
-        <Card className="grid grid-cols-2 gap-6 p-6">
+        <Card className="grid gap-5 p-4 sm:p-6 md:grid-cols-2 md:gap-6">
           <label className="space-y-2 text-sm text-slate-300">
             <span>Note range</span>
             <select
@@ -233,7 +233,7 @@ export function ReflexTrainer() {
             </select>
           </label>
           {config.rangePreset === "custom" && (
-            <div className="col-span-2 grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2 md:col-span-2">
               <label className="text-sm text-slate-300">Minimum MIDI<input type="number" min={0} max={127} value={config.minMidi} onChange={(event) => setConfig((current) => ({ ...current, minMidi: Number(event.target.value) }))} className="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white" /></label>
               <label className="text-sm text-slate-300">Maximum MIDI<input type="number" min={0} max={127} value={config.maxMidi} onChange={(event) => setConfig((current) => ({ ...current, maxMidi: Number(event.target.value) }))} className="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white" /></label>
             </div>
@@ -244,8 +244,8 @@ export function ReflexTrainer() {
           <label className="flex items-center gap-3 rounded-xl border border-slate-800 p-4 text-sm text-slate-300">
             <input type="checkbox" checked={config.soundEnabled} onChange={(event) => setConfig((current) => ({ ...current, soundEnabled: event.target.checked }))} /> App sound
           </label>
-          <div className="col-span-2 flex justify-end">
-            <Button size="lg" onClick={() => void startSession()} disabled={config.minMidi > config.maxMidi}><Play className="size-5" /> Start training</Button>
+          <div className="flex justify-end md:col-span-2">
+            <Button className="w-full sm:w-auto" size="lg" onClick={() => void startSession()} disabled={config.minMidi > config.maxMidi}><Play className="size-5" /> Start training</Button>
           </div>
         </Card>
       </div>
@@ -253,29 +253,29 @@ export function ReflexTrainer() {
   }
 
   if (phase === "complete" && summary) {
-    return <div className="px-6 py-10"><SessionResult summary={summary} syncStatus={saveStatus} onRetry={() => { phaseRef.current = "configure"; setPhase("configure"); }} onPracticeWeak={() => void startSession(summary.weakNotes.slice(0, 5).map((note) => note.midi))} /></div>;
+    return <div className="px-4 py-8 sm:px-6 sm:py-10"><SessionResult summary={summary} syncStatus={saveStatus} onRetry={() => { phaseRef.current = "configure"; setPhase("configure"); }} onPracticeWeak={() => void startSession(summary.weakNotes.slice(0, 5).map((note) => note.midi))} /></div>;
   }
 
   return (
-    <div className={focusMode ? "fixed inset-0 z-50 space-y-4 overflow-auto bg-slate-950 px-8 py-6" : "mx-auto max-w-7xl space-y-4 px-6 py-6"}>
-      <div className="flex items-center justify-between">
+    <div className={focusMode ? "fixed inset-0 z-50 space-y-4 overflow-auto bg-slate-950 px-3 py-4 sm:px-8 sm:py-6" : "mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-teal-300">REFLEX</p>
           <p className="text-xs text-slate-500">{computerKeyboardGuide}</p>
         </div>
-        <div className="flex items-center gap-6 text-sm text-slate-300">
-          <span>{trials.length} / {config.sessionLength === "endless" ? "∞" : config.sessionLength}</span>
-          <span>First try {trials.length ? Math.round((trials.filter((trial) => trial.firstTryCorrect).length / trials.length) * 100) : 100}%</span>
-          <span>Attempts {attemptCount || 1}</span>
+        <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-900/70 p-2 text-center text-xs text-slate-300 sm:flex sm:items-center sm:gap-6 sm:bg-transparent sm:p-0 sm:text-sm">
+          <span><span className="block text-slate-500 sm:inline">Notes </span>{trials.length} / {config.sessionLength === "endless" ? "∞" : config.sessionLength}</span>
+          <span><span className="block text-slate-500 sm:inline">First try </span>{trials.length ? Math.round((trials.filter((trial) => trial.firstTryCorrect).length / trials.length) * 100) : 100}%</span>
+          <span><span className="block text-slate-500 sm:inline">Attempts </span>{attemptCount || 1}</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="ghost" onClick={() => setFocusMode((active) => !active)}><Maximize2 className="size-4" /> {focusMode ? "Exit focus" : "Focus"}</Button>
           {phase === "paused" ? <Button size="sm" onClick={resume}><Play className="size-4" /> Resume</Button> : <Button size="sm" variant="secondary" onClick={pause}><Pause className="size-4" /> Pause</Button>}
           {config.sessionLength === "endless" && <Button size="sm" variant="danger" onClick={() => void finishSession(trialsRef.current, "user-stopped")}><Square className="size-4" /> Finish</Button>}
         </div>
       </div>
 
-      <Card className="relative p-5">
+      <Card className="relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={resume}><Play className="size-4" /> Resume session</Button></div>}
         {target && <MusicStaff notes={[target]} feedback={feedback} onReady={markTargetReady} />}
         <div className="mt-3 h-6 text-center text-sm font-semibold" aria-live="polite">

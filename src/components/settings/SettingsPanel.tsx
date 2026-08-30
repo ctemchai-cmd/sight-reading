@@ -38,20 +38,20 @@ export function SettingsPanel() {
   };
 
   const toggle = (key: keyof Omit<LocalPreferences, "defaultSessionLength">, label: string, description: string) => (
-    <label className="flex items-center justify-between gap-5 rounded-xl border border-slate-800 p-4"><span><span className="block text-sm font-medium text-white">{label}</span><span className="mt-1 block text-xs text-slate-400">{description}</span></span><input type="checkbox" checked={preferences[key]} onChange={(event) => setPreferences((current) => ({ ...current, [key]: event.target.checked }))} /></label>
+    <label className="flex items-start justify-between gap-4 rounded-xl border border-slate-800 p-4"><span><span className="block text-sm font-medium text-white">{label}</span><span className="mt-1 block text-xs leading-5 text-slate-400">{description}</span></span><input className="mt-1 shrink-0" type="checkbox" checked={preferences[key]} onChange={(event) => setPreferences((current) => ({ ...current, [key]: event.target.checked }))} /></label>
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-4xl font-bold text-white">Settings</h1>
-      <Card className="mt-8 space-y-5 p-6">
+    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-12">
+      <h1 className="text-3xl font-bold text-white sm:text-4xl">Settings</h1>
+      <Card className="mt-7 space-y-5 p-4 sm:mt-8 sm:p-6">
         <label className="block text-sm text-slate-300">Theme<select value={theme ?? "system"} onChange={(event) => setTheme(event.target.value)} className="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
         <label className="block text-sm text-slate-300">Default session length<select value={preferences.defaultSessionLength} onChange={(event) => setPreferences((current) => ({ ...current, defaultSessionLength: Number(event.target.value) }))} className="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white">{[25, 50, 71, 100].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
         {toggle("adaptive", "Adaptive training", "Prefer weaker notes while retaining normal exploration.")}
         {toggle("sound", "App sound", "Play the lightweight synth for virtual and computer-keyboard input.")}
         {toggle("midiSound", "App sound for MIDI", "Off by default to avoid doubling a real piano's sound.")}
         {toggle("computerKeyboard", "Computer keyboard input", "Use A–K as a one-octave fallback input.")}
-        <div className="flex items-center justify-end gap-3"><span className="text-sm text-teal-300" aria-live="polite">{saved ? "Saved" : ""}</span><Button onClick={() => void save()}>Save settings</Button></div>
+        <div className="flex items-center justify-end gap-3"><span className="text-sm text-teal-300" aria-live="polite">{saved ? "Saved" : ""}</span><Button className="w-full sm:w-auto" onClick={() => void save()}>Save settings</Button></div>
       </Card>
     </div>
   );

@@ -12,5 +12,8 @@ export default defineConfig({
     url: "http://127.0.0.1:3107",
     reuseExistingServer: !process.env.CI,
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "mobile-chrome", use: { ...devices["Pixel 5"], viewport: { width: 360, height: 800 } } },
+  ],
 });

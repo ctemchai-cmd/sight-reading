@@ -28,7 +28,7 @@ export function SessionResult({ summary, syncStatus, onRetry, onPracticeWeak }: 
         <h1 className="text-3xl font-bold text-white">Session complete</h1>
         <p className="mt-2 text-slate-400">{summary.completedTargets} targets completed · {syncStatus === "pending" ? "Cloud save queued" : syncStatus === "synced" ? "Saved to cloud" : "Saving…"}</p>
       </div>
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {metrics.map(([label, value]) => (
           <Card key={label} className="p-4 text-center">
             <p className="text-2xl font-bold text-white">{value}</p>
@@ -38,7 +38,7 @@ export function SessionResult({ summary, syncStatus, onRetry, onPracticeWeak }: 
       </div>
       <Card className="p-5">
         <h2 className="font-semibold text-white">Weakest notes</h2>
-        <div className="mt-3 grid grid-cols-5 gap-3">
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {summary.weakNotes.slice(0, 5).map((stat) => (
             <div key={stat.midi} className="rounded-xl bg-slate-950/60 p-3">
               <p className="font-semibold text-white">{formatNoteName(midiToNotatedPitch(stat.midi))}</p>
@@ -48,11 +48,11 @@ export function SessionResult({ summary, syncStatus, onRetry, onPracticeWeak }: 
           ))}
         </div>
       </Card>
-      <div className="flex justify-center gap-3">
+      <div className="flex flex-col justify-center gap-3 sm:flex-row">
         {onPracticeWeak && summary.weakNotes.length > 0 && (
-          <Button onClick={onPracticeWeak}><Target className="size-4" /> Practice weak notes</Button>
+          <Button className="w-full sm:w-auto" onClick={onPracticeWeak}><Target className="size-4" /> Practice weak notes</Button>
         )}
-        <Button variant="secondary" onClick={onRetry}><RotateCcw className="size-4" /> New session</Button>
+        <Button className="w-full sm:w-auto" variant="secondary" onClick={onRetry}><RotateCcw className="size-4" /> New session</Button>
       </div>
     </div>
   );

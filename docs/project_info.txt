@@ -6,7 +6,8 @@ These decisions override older or broader statements elsewhere in this document 
 
 * Primary supported platform: current Google Chrome desktop on macOS and Windows.
 * Primary hardware path: USB MIDI through the Web MIDI API.
-* Edge Chromium and Bluetooth MIDI are best-effort; Safari and mobile are not V1 release blockers.
+* Edge Chromium and Bluetooth MIDI are best-effort. Safari and mobile Web MIDI are not V1 release blockers, but every page must remain readable and operable at a 360 px mobile viewport without document-level horizontal overflow.
+* Responsive mobile layout includes compact navigation, stacked cards and controls, reflowed sheet-music measures, a horizontally scrollable touch piano, responsive dashboard charts, and a wrapped pitch heatmap. Chrome Desktop + USB MIDI remains the formally supported training path.
 * Bluetooth devices are supported when the operating system exposes them to Chrome as a Web MIDI input. V1 will not implement a separate Web Bluetooth/BLE-MIDI protocol stack.
 * V1 remains a complete product slice: Reflex, Sheet Reading, virtual piano, computer keyboard, MIDI, audio, adaptive practice, private Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
 * V1 is a private application. `/train`, `/dashboard`, and `/settings` require a valid non-anonymous Supabase session. Access is granted or revoked by creating or deleting users in the Supabase dashboard; no separate application allowlist is required.
@@ -34,17 +35,17 @@ Build V1 as deployable vertical milestones: foundation and core logic, playable 
 
 Implemented in the repository:
 
-* Next.js 16 App Router application with strict TypeScript, Tailwind CSS, installable PWA metadata, production security headers, and a Vercel-compatible build.
+* Next.js 16 App Router application with strict TypeScript, Tailwind CSS, 360 px responsive layouts, installable PWA metadata, production security headers, and a Vercel-compatible build.
 * Music domain types that keep written pitch spelling separate from sounding MIDI pitch.
 * Treble natural-note ranges, MIDI/note conversion, ledger classification, uniform generation, adaptive weighting, trial/attempt scoring, and first-attempt accuracy.
 * Reflex Trainer with 25/50/71/100/endless sessions, pause, focus mode, configurable delay, ledger presets, custom MIDI range, virtual piano, computer keyboard input, results, and weak-note replay.
 * Sheet Reading with four 4/4 measures, sixteen quarter notes, current-note highlighting, and no advance on a wrong input.
-* VexFlow 5 SVG notation, Tone.js audio initialized by explicit user action, and a normalized input path.
+* Responsive VexFlow 5 SVG notation that reflows sheet measures across rows on narrow screens, Tone.js audio initialized by explicit user action, and a normalized input path.
 * Web MIDI permission flow, device selection, connection state handling, Note On/Off parsing, velocity-zero Note Off, channel normalization, and reconnect-safe UI.
 * IndexedDB pending cloud-save queue without a guest-mode bypass.
 * Private Supabase email/password Auth, protected application routes, reproducible SQL migration, RLS, transactional session RPC, aggregate per-note statistics, and retry-safe session IDs.
 * Dashboard metrics, response-time trend, weakest notes, and pitch heatmap.
-* Unit/component tests, Chrome Playwright smoke test, ESLint, strict typecheck, and successful Next.js production build.
+* Unit/component tests, desktop and mobile-Chrome Playwright smoke tests with horizontal-overflow assertions, ESLint, strict typecheck, and successful Next.js production build.
 
 External setup still required before cloud features are live:
 
