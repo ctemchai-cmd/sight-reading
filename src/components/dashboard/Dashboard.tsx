@@ -43,10 +43,11 @@ export function Dashboard() {
   const [cloudUser, setCloudUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [heatmapMetric, setHeatmapMetric] = useState<"speed" | "accuracy">("speed");
+  const [rejected, setRejected] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
-    await flushPendingSessions();
+    setRejected((await flushPendingSessions()).rejected);
     const supabase = getSupabaseBrowserClient();
     const user = supabase ? (await supabase.auth.getUser()).data.user : null;
     setCloudUser(user?.email ?? null);
@@ -118,6 +119,20 @@ export function Dashboard() {
         <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-300">Progress</p><h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">Training dashboard</h1><p className="mt-2 break-all text-sm text-slate-400">{cloudUser ? <span className="inline-flex items-center gap-2"><Cloud className="size-4 shrink-0" /> Synced as {cloudUser}</span> : "Private cloud history"}</p></div>
         <div className="flex flex-wrap gap-2"><Button className="flex-1 sm:flex-none" variant="ghost" onClick={() => void load()}><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Refresh</Button>{cloudUser ? <Button className="flex-1 sm:flex-none" variant="secondary" onClick={() => void signOut()}><LogOut className="size-4" /> Log out</Button> : <Link className="flex-1 sm:flex-none" href="/login"><Button className="w-full" variant="secondary"><LogIn className="size-4" /> Log in</Button></Link>}</div>
       </div>
+
+      {rejected > 0 && (
+        <Card className="mt-7 border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200 sm:mt-8">
+          <p className="font-semibold">
+            {rejected} finished {rejected === 1 ? "session is" : "sessions are"} waiting and cannot be saved
+          </p>
+          <p className="mt-1 leading-6">
+            The server refuses them as they stand, so they are held rather than retried forever. This usually
+            means a migration in <code>supabase/migrations/</code> has not been applied yet — a session in a
+            mode or clef the database does not accept is rejected on arrival. The browser console has the
+            reason. Later sessions are unaffected and save normally.
+          </p>
+        </Card>
+      )}
 
       <Card className="mt-7 flex flex-wrap items-center justify-between gap-5 p-5 sm:mt-8">
         <div className="min-w-0">
