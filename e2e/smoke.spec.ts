@@ -9,6 +9,9 @@ test("requires private access before opening training", async ({ page }, testInf
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /See the note/i })).toBeVisible();
   await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "MIDI connection" }).click();
+  await expect(page.getByRole("dialog", { name: "MIDI connection settings" })).toBeVisible();
+  await page.getByRole("button", { name: "MIDI connection" }).click();
   if (testInfo.project.name === "mobile-landscape") {
     expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(1);
   }

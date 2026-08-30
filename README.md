@@ -19,6 +19,10 @@ A Chrome Desktop-first piano sight-reading trainer built with Next.js, VexFlow, 
 
 Training, dashboard, and settings routes fail closed when Supabase is missing or there is no valid non-anonymous Supabase session. The application has no public sign-up route and guest training is disabled, so access is managed by creating or deleting users in the Supabase dashboard. If authentication expires while a session is already open, its result is queued in IndexedDB and retried after the user signs in again.
 
+### Refresh an existing PWA installation
+
+The manifest keeps the previous `/train` app identity but now launches at `/` with scope `/`. After deploying this update, close the installed app and restart Chrome so it refreshes the manifest. Check `about://web-app-internals/` for `manifest_id` and `start_url`. If the operating-system icon still does not launch, remove the old installed app from Chrome and install it again from the production URL; an old OS shortcut can remain stale even when Chrome's “Open in app” action works.
+
 ## Verification
 
 ```bash

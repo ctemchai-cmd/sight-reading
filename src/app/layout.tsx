@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   description: "Build fast, accurate piano sight-reading reflexes.",
   applicationName: "Sight Reading Trainer",
   icons: { icon: "/icon.svg", apple: "/icon-192.png" },
+  appleWebApp: { capable: true, title: "Sight Reader", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {

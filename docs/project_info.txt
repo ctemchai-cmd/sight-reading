@@ -8,7 +8,9 @@ These decisions override older or broader statements elsewhere in this document 
 * Primary hardware path: USB MIDI through the Web MIDI API.
 * Edge Chromium and Bluetooth MIDI are best-effort. Safari and mobile Web MIDI are not V1 release blockers, but every page must remain readable and operable at a 360 px mobile viewport without document-level horizontal overflow.
 * Responsive mobile layout includes compact navigation, stacked cards and controls, reflowed sheet-music measures, a horizontally scrollable touch piano, responsive dashboard charts, and a wrapped pitch heatmap. Chrome Desktop + USB MIDI remains the formally supported training path.
-* Mobile landscape at 800 × 360 is an explicit layout acceptance target: the document and virtual piano must fit the viewport width, Reflex uses a two-column staff/input workspace, and Sheet Reading uses a single four-measure row whenever space permits.
+* Mobile landscape at 800 × 360 is an explicit layout acceptance target: training uses a full-width vertical stack with notation on top and the virtual piano below. Sheet Reading uses a single four-measure row whenever space permits.
+* MIDI permission, status, and device selection live in a persistent top-navigation menu rather than inside the training canvas. The MIDI connection survives client-side navigation between training modes.
+* Reflex Focus Mode keeps the compact app header available for MIDI access while hiding Home, Train, Progress, Settings, and the long brand label. Exit Focus, pause, notation, metrics, and piano remain available.
 * Bluetooth devices are supported when the operating system exposes them to Chrome as a Web MIDI input. V1 will not implement a separate Web Bluetooth/BLE-MIDI protocol stack.
 * V1 remains a complete product slice: Reflex, Sheet Reading, virtual piano, computer keyboard, MIDI, audio, adaptive practice, private Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
 * V1 is a private application. `/train`, `/dashboard`, and `/settings` require a valid non-anonymous Supabase session. Access is granted or revoked by creating or deleting users in the Supabase dashboard; no separate application allowlist is required.
@@ -16,7 +18,7 @@ These decisions override older or broader statements elsewhere in this document 
 * The application fails closed if Supabase public configuration is absent or the request has no valid authenticated session. The landing page, login page, and authentication callback remain public.
 * IndexedDB is used only as a pending cloud-save queue if authentication or Supabase connectivity is interrupted after a private training session has already started. It is not a guest-history store.
 * Vercel is the primary runtime and deployment target. Local execution is for development verification only; production configuration, routing, security headers, and environment variables must work on Vercel.
-* PWA V1 is installable in standalone mode but does not promise offline training or a service worker cache.
+* PWA V1 is installable in standalone landscape mode but does not promise offline training or a service worker cache. The manifest uses stable ID `/train` for compatibility with earlier installs, public launch URL `/`, full scope `/`, and both general and maskable 192/512 launch icons.
 * UI language is English for V1.
 * Treble clef and natural notes are the only scored notation in V1. The domain model must still preserve written pitch spelling separately from sounding MIDI pitch.
 * Performance mode, native mobile applications, bass/grand staff, advanced rhythm, MusicXML, and full offline sync remain future work.
@@ -42,7 +44,7 @@ Implemented in the repository:
 * Reflex Trainer with 25/50/71/100/endless sessions, pause, focus mode, configurable delay, ledger presets, custom MIDI range, virtual piano, computer keyboard input, results, and weak-note replay.
 * Sheet Reading with four 4/4 measures, sixteen quarter notes, current-note highlighting, and no advance on a wrong input.
 * Responsive VexFlow 5 SVG notation that reflows sheet measures across rows on narrow screens, Tone.js audio initialized by explicit user action, and a normalized input path.
-* Web MIDI permission flow, device selection, connection state handling, Note On/Off parsing, velocity-zero Note Off, channel normalization, and reconnect-safe UI.
+* Persistent navigation-level Web MIDI permission flow, device selection, connection state handling, Note On/Off parsing, velocity-zero Note Off, channel normalization, and reconnect-safe UI shared by every trainer.
 * IndexedDB pending cloud-save queue without a guest-mode bypass.
 * Private Supabase email/password Auth, protected application routes, reproducible SQL migration, RLS, transactional session RPC, aggregate per-note statistics, and retry-safe session IDs.
 * Dashboard metrics, response-time trend, weakest notes, and pitch heatmap.
@@ -966,6 +968,8 @@ Button:
 ```txt
 Connect MIDI Keyboard
 ```
+
+Place this action, connection status, and device selector in the persistent MIDI navigation menu. Do not place a full MIDI panel between the notation and virtual piano.
 
 Then:
 
@@ -2170,11 +2174,11 @@ Focus Mode
 
 which hides:
 
-* navigation
-* dashboard links
+* Home, Train, Progress, and Settings navigation
+* long application brand text
 * unnecessary UI
 
-Staff and piano become larger.
+Keep the compact app mark and MIDI menu available. Staff and piano use the remaining space, with notation above the piano in landscape orientation.
 
 ---
 
@@ -2462,7 +2466,7 @@ Implement:
 The MVP is successful when:
 
 1. User can open the website.
-2. User can start training without creating an account.
+2. A manually created Supabase user can authenticate and start training.
 3. A treble-clef note is rendered correctly.
 4. Ledger-line notes render correctly.
 5. User can answer using the virtual keyboard.
@@ -2484,7 +2488,7 @@ The MVP is successful when:
 MIDI feature is successful when:
 
 1. Browser detects Web MIDI capability.
-2. User clicks Connect MIDI.
+2. User opens the top-navigation MIDI menu and clicks Connect MIDI.
 3. Permission is requested.
 4. Available MIDI devices appear.
 5. User selects keyboard.
@@ -2780,5 +2784,6 @@ After completing the first usable build, report:
 * Any known browser limitations
 
 
-####
-Aim to create with PWA standalone installation if Possible
+#### PWA standalone installation
+
+The production manifest must provide a stable app identity, public same-origin launch URL, full application scope, and `any` plus `maskable` PNG icons. An installed app must launch from its operating-system icon as well as Chrome's “Open in app” action. After a manifest identity or launch update, verify the installed values in Chrome web-app internals and reinstall a stale operating-system shortcut if Chrome does not refresh it.

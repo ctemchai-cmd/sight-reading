@@ -4,7 +4,6 @@ import { Pause, Play } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { MusicStaff } from "@/components/music/MusicStaff";
 import { PianoKeyboard } from "@/components/music/PianoKeyboard";
-import { MidiPanel } from "@/components/midi/MidiPanel";
 import { SessionResult } from "@/components/training/SessionResult";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -102,7 +101,7 @@ export function SheetTrainer() {
     setFeedback(null);
   };
 
-  const midi = useMidi(handleInput, (midiNote) => engine.current?.noteOff(midiNote));
+  useMidi(handleInput, (midiNote) => engine.current?.noteOff(midiNote));
   useComputerKeyboard(true, handleInput, (midiNote) => engine.current?.noteOff(midiNote));
 
   const start = async () => {
@@ -162,13 +161,14 @@ export function SheetTrainer() {
         <p className="order-3 w-full rounded-xl bg-slate-900/70 p-2 text-center text-sm text-slate-300 sm:order-none sm:w-auto sm:bg-transparent sm:p-0">Note {currentIndex + 1} / 16 · First try {trials.length ? Math.round(trials.filter((trial) => trial.firstTryCorrect).length / trials.length * 100) : 100}%</p>
         {phase === "paused" ? <Button size="sm" onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button> : <Button size="sm" variant="secondary" onClick={() => { phaseRef.current = "paused"; armedRef.current = false; openTrialRef.current = null; setPhase("paused"); }}><Pause className="size-4" /> Pause</Button>}
       </div>
-      <Card className="relative p-3 sm:p-5">
+      <Card className="sheet-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button></div>}
         {notes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={notes} currentIndex={currentIndex} mode="sheet" feedback={feedback} onReady={markReady} />}
-        <p className={`mt-3 h-5 text-center text-sm font-semibold ${feedback === "incorrect" ? "text-rose-300" : "text-teal-300"}`} aria-live="polite">{feedback === "incorrect" ? "✕ Wrong note — stay on the current note" : feedback === "correct" ? "✓" : ""}</p>
+        <p className={`training-feedback mt-3 h-5 text-center text-sm font-semibold ${feedback === "incorrect" ? "text-rose-300" : "text-teal-300"}`} aria-live="polite">{feedback === "incorrect" ? "✕ Wrong note — stay on the current note" : feedback === "correct" ? "✓" : ""}</p>
       </Card>
-      <PianoKeyboard minMidi={range.minMidi} maxMidi={range.maxMidi} disabled={phase !== "running"} onNoteOn={(midiNote, velocity) => handleInput({ midi: midiNote, velocity, source: "touch", occurredAtMs: performance.now() })} onNoteOff={(midiNote) => engine.current?.noteOff(midiNote)} />
-      <MidiPanel status={midi.status} devices={midi.devices} selectedDeviceId={midi.selectedDeviceId} onConnect={() => void midi.connect()} onSelect={midi.selectDevice} />
+      <div className="sheet-training-inputs">
+        <PianoKeyboard minMidi={range.minMidi} maxMidi={range.maxMidi} disabled={phase !== "running"} onNoteOn={(midiNote, velocity) => handleInput({ midi: midiNote, velocity, source: "touch", occurredAtMs: performance.now() })} onNoteOff={(midiNote) => engine.current?.noteOff(midiNote)} />
+      </div>
       {audioError && <p className="text-sm text-amber-300">{audioError}</p>}
     </div>
   );

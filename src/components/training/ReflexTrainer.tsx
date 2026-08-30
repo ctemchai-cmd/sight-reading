@@ -4,7 +4,6 @@ import { Maximize2, Pause, Play, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MusicStaff } from "@/components/music/MusicStaff";
 import { PianoKeyboard } from "@/components/music/PianoKeyboard";
-import { MidiPanel } from "@/components/midi/MidiPanel";
 import { SessionResult } from "@/components/training/SessionResult";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -66,6 +65,14 @@ export function ReflexTrainer() {
   useEffect(() => {
     configRef.current = config;
   }, [config]);
+
+  useEffect(() => {
+    if (focusMode) document.documentElement.dataset.focusMode = "true";
+    else delete document.documentElement.dataset.focusMode;
+    return () => {
+      delete document.documentElement.dataset.focusMode;
+    };
+  }, [focusMode]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -142,7 +149,7 @@ export function ReflexTrainer() {
     timeoutRef.current = setTimeout(showNextTarget, currentConfig.nextNoteDelayMs);
   };
 
-  const midi = useMidi(handleInput, (midiNote) => engine.current?.noteOff(midiNote));
+  useMidi(handleInput, (midiNote) => engine.current?.noteOff(midiNote));
   useComputerKeyboard(config.computerKeyboardEnabled, handleInput, (midiNote) => engine.current?.noteOff(midiNote));
 
   const startSession = useCallback(async (focusMidis?: number[]) => {
@@ -257,7 +264,7 @@ export function ReflexTrainer() {
   }
 
   return (
-    <div className={focusMode ? "reflex-training-layout fixed inset-0 z-50 space-y-4 overflow-auto bg-slate-950 px-3 py-4 sm:px-8 sm:py-6" : "reflex-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"}>
+    <div className={focusMode ? "focus-training-surface reflex-training-layout fixed inset-x-0 bottom-0 top-16 z-40 space-y-4 overflow-auto bg-slate-950 px-3 py-4 sm:px-8 sm:py-6" : "reflex-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"}>
       <div className="reflex-training-toolbar flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-teal-300">REFLEX</p>
@@ -278,13 +285,13 @@ export function ReflexTrainer() {
       <Card className="reflex-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={resume}><Play className="size-4" /> Resume session</Button></div>}
         {target && <MusicStaff notes={[target]} feedback={feedback} onReady={markTargetReady} />}
-        <div className="mt-3 h-6 text-center text-sm font-semibold" aria-live="polite">
+        <div className="training-feedback mt-3 h-6 text-center text-sm font-semibold" aria-live="polite">
           {feedback === "correct" && <span className="text-teal-300">✓ Correct</span>}
           {feedback === "incorrect" && <span className="text-rose-300">✕ Try again</span>}
         </div>
       </Card>
 
-      <div className="reflex-training-inputs space-y-4">
+      <div className="reflex-training-inputs">
         <PianoKeyboard
           minMidi={config.minMidi}
           maxMidi={config.maxMidi}
@@ -292,7 +299,6 @@ export function ReflexTrainer() {
           onNoteOn={(midiNote, velocity) => handleInput({ midi: midiNote, velocity, source: "touch", occurredAtMs: performance.now() })}
           onNoteOff={(midiNote) => engine.current?.noteOff(midiNote)}
         />
-        <MidiPanel status={midi.status} devices={midi.devices} selectedDeviceId={midi.selectedDeviceId} onConnect={() => void midi.connect()} onSelect={midi.selectDevice} />
       </div>
       {audioError && <p className="reflex-training-error text-sm text-amber-300">{audioError}</p>}
     </div>

@@ -47,6 +47,7 @@ export function MusicStaff({
   const containerRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef(onReady);
   const [width, setWidth] = useState(mode === "single" ? 720 : 1050);
+  const [compactLandscape, setCompactLandscape] = useState(false);
 
   useEffect(() => {
     readyRef.current = onReady;
@@ -61,14 +62,22 @@ export function MusicStaff({
   }, []);
 
   useEffect(() => {
+    const media = window.matchMedia("(orientation: landscape) and (min-width: 700px) and (max-height: 600px)");
+    const update = () => setCompactLandscape(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
     const container = containerRef.current;
     if (!container || notes.length === 0) return;
     container.replaceChildren();
     const measureCount = Math.ceil(notes.length / 4);
     const measuresPerRow = width < 520 ? 1 : width < 680 ? 2 : 4;
-    const rowHeight = 130;
+    const rowHeight = compactLandscape ? 104 : 130;
     const rowCount = Math.ceil(measureCount / measuresPerRow);
-    const height = mode === "single" ? 180 : rowCount * rowHeight + 10;
+    const height = mode === "single" ? (compactLandscape ? 132 : 180) : rowCount * rowHeight + 8;
     const renderer = new Renderer(container, Renderer.Backends.SVG);
     renderer.resize(width, height);
     const context = renderer.getContext();
@@ -78,7 +87,7 @@ export function MusicStaff({
     context.setStrokeStyle(ink);
 
     if (mode === "single") {
-      const stave = new Stave(24, 28, width - 48);
+      const stave = new Stave(24, compactLandscape ? 22 : 28, width - 48);
       stave.addClef("treble").setContext(context).draw();
       const color = feedback === "correct" ? "#2dd4bf" : feedback === "incorrect" ? "#fb7185" : ink;
       const vexNote = createVexNote(notes[0], color);
@@ -94,7 +103,11 @@ export function MusicStaff({
         const rowIndex = Math.floor(measureIndex / measuresPerRow);
         const columnIndex = measureIndex % measuresPerRow;
         const startsRow = columnIndex === 0;
-        const stave = new Stave(14 + columnIndex * measureWidth, 18 + rowIndex * rowHeight, measureWidth);
+        const stave = new Stave(
+          14 + columnIndex * measureWidth,
+          (compactLandscape ? 10 : 18) + rowIndex * rowHeight,
+          measureWidth,
+        );
         if (startsRow) stave.addClef("treble");
         if (measureIndex === 0) stave.addTimeSignature("4/4");
         stave.setContext(context).draw();
@@ -118,7 +131,7 @@ export function MusicStaff({
 
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
-  }, [notes, currentIndex, feedback, mode, width]);
+  }, [notes, currentIndex, feedback, mode, width, compactLandscape]);
 
   return (
     <div
