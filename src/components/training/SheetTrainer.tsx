@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Pause, Play } from "lucide-react";
+import { Maximize2, Pause, Play, RotateCcw } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { MusicStaff } from "@/components/music/MusicStaff";
 import { PianoKeyboard } from "@/components/music/PianoKeyboard";
@@ -202,6 +202,7 @@ export function SheetTrainer() {
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="ghost" onClick={toggleFocusMode}><Maximize2 className="size-4" /> Focus</Button>
           {phase === "paused" ? <Button size="sm" onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button> : <Button size="sm" variant="secondary" onClick={() => { phaseRef.current = "paused"; armedRef.current = false; openTrialRef.current = null; setPhase("paused"); }}><Pause className="size-4" /> Pause</Button>}
+          <Button size="sm" variant="ghost" onClick={() => void start()}><RotateCcw className="size-4" /> Reset</Button>
         </div>
       </div>
       )}

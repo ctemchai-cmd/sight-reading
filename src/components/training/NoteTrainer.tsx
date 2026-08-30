@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Pause, Play, Square } from "lucide-react";
+import { Maximize2, Pause, Play, RotateCcw, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MusicStaff } from "@/components/music/MusicStaff";
 import { PianoKeyboard } from "@/components/music/PianoKeyboard";
@@ -178,6 +178,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   useComputerKeyboard(config.computerKeyboardEnabled, handleInput, (midiNote) => engine.current?.noteOff(midiNote));
 
   const startSession = useCallback(async (focusMidis?: number[]) => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (configRef.current.soundEnabled) await initializeAudio();
     // Resolve a random choice now, so the session records the key it landed on.
     const keySignature = keyChoice === "random" ? randomKey() : keyChoice;
@@ -337,6 +338,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="ghost" onClick={toggleFocusMode}><Maximize2 className="size-4" /> Focus</Button>
           {phase === "paused" ? <Button size="sm" onClick={resume}><Play className="size-4" /> Resume</Button> : <Button size="sm" variant="secondary" onClick={pause}><Pause className="size-4" /> Pause</Button>}
+          <Button size="sm" variant="ghost" onClick={() => void startSession()}><RotateCcw className="size-4" /> Reset</Button>
           {config.sessionLength === "endless" && <Button size="sm" variant="danger" onClick={() => void finishSession(trialsRef.current, "user-stopped")}><Square className="size-4" /> Finish</Button>}
         </div>
       </div>
