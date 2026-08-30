@@ -207,7 +207,7 @@ export function SheetTrainer() {
       )}
       <Card className="sheet-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button></div>}
-        {lineNotes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={lineNotes} currentIndex={currentIndex - lineStart} mode="sheet" keySignature={keySignature} feedback={feedback} onReady={markReady} />}
+        {lineNotes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={lineNotes} currentIndex={currentIndex - lineStart} mode="sheet" keySignature={keySignature} fill={focusMode} feedback={feedback} onReady={markReady} />}
         <p className={`training-feedback mt-3 h-5 text-center text-sm font-semibold ${feedback === "incorrect" ? "text-rose-300" : "text-teal-300"}`} aria-live="polite">{feedback === "incorrect" ? "✕ Wrong note — stay on the current note" : feedback === "correct" ? "✓" : ""}</p>
       </Card>
       <div className="sheet-training-inputs">

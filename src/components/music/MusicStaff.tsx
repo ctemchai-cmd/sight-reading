@@ -31,6 +31,14 @@ const SPACE_ABOVE_STAVE_PX = 41;
 // against the unchanged horizontal spacing.
 const BASE_STREAM_HEIGHT = 150;
 const MAX_FILL_SCALE = 2.2;
+/**
+ * Sheet music is drawn at a fixed size by VexFlow, which reads small on a
+ * tablet held at arm's length. How far it can grow is set by how much room a
+ * measure needs before its notes collide, and by how much height is going
+ * spare — four measures across a row is the real ceiling here.
+ */
+const SHEET_MIN_MEASURE_PX = 150;
+const MAX_SHEET_SCALE = 2;
 
 interface MusicStaffProps {
   notes: TargetNote[];
@@ -230,13 +238,24 @@ export function MusicStaff({
     const measuresPerRow = width < 520 ? 1 : width < 680 ? 2 : 4;
     const rowHeight = compactLandscape ? 104 : 130;
     const rowCount = Math.ceil(measureCount / measuresPerRow);
+    const naturalHeight = rowCount * rowHeight + 8;
+    // Compact landscape has no spare height by construction — everything on that
+    // layout already barely fits — so it keeps the drawn size it was tuned at.
+    const heightBudget = compactLandscape ? naturalHeight : window.innerHeight * (fill ? 0.6 : 0.42);
+    const sheetScale = Math.min(
+      MAX_SHEET_SCALE,
+      width / SHEET_MIN_MEASURE_PX / measuresPerRow,
+      heightBudget / naturalHeight,
+    );
+    const scale = Math.max(1, sheetScale);
     const renderer = new Renderer(layer, Renderer.Backends.SVG);
-    renderer.resize(width, rowCount * rowHeight + 8);
+    renderer.resize(width, Math.round(naturalHeight * scale));
     const context = renderer.getContext();
+    context.scale(scale, scale);
     context.setFillStyle(INK);
     context.setStrokeStyle(INK);
 
-    const usableWidth = width - 28;
+    const usableWidth = width / scale - 28;
     const measureWidth = usableWidth / Math.min(measuresPerRow, measureCount);
     for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
       const start = measureIndex * 4;
@@ -275,8 +294,8 @@ export function MusicStaff({
     const view = containerRef.current;
     if (view) {
       const topOffset = compactLandscape ? 10 : 18;
-      const rowTop = topOffset + Math.floor(Math.floor(currentIndex / 4) / measuresPerRow) * rowHeight;
-      const rowBottom = rowTop + rowHeight;
+      const rowTop = (topOffset + Math.floor(Math.floor(currentIndex / 4) / measuresPerRow) * rowHeight) * scale;
+      const rowBottom = rowTop + rowHeight * scale;
       if (rowTop < view.scrollTop) view.scrollTop = Math.max(0, rowTop - 6);
       else if (rowBottom > view.scrollTop + view.clientHeight) {
         view.scrollTop = rowBottom - view.clientHeight + 6;
@@ -285,7 +304,7 @@ export function MusicStaff({
 
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
-  }, [compactLandscape, currentIndex, feedback, keySignature, mode, notes, width]);
+  }, [compactLandscape, currentIndex, feedback, fill, keySignature, mode, notes, width]);
 
   return (
     <div
