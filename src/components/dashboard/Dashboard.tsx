@@ -8,7 +8,8 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { formatNoteName, midiToNotatedPitch, naturalMidisInRange } from "@/core/music/notes";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { formatMilliseconds } from "@/lib/utils";
+import { cn, formatMilliseconds } from "@/lib/utils";
+import { summarisePractice } from "@/core/training/practiceHistory";
 import { flushPendingSessions } from "@/lib/sessionPersistence";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { WeakNoteStat } from "@/types/training";
@@ -108,6 +109,8 @@ export function Dashboard() {
     return { notes, weightedAccuracy, averageResponse };
   }, [sessions]);
 
+  const practice = useMemo(() => summarisePractice(sessions.map((session) => session.completedAt)), [sessions]);
+
   const trend = [...sessions].reverse().map((session, index) => ({
     session: index + 1,
     speed: session.averageResponseMs ? Math.round(session.averageResponseMs) : null,
@@ -134,7 +137,37 @@ export function Dashboard() {
         <div className="flex flex-wrap gap-2"><Button className="flex-1 sm:flex-none" variant="ghost" onClick={() => void load()}><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} /> Refresh</Button>{cloudUser ? <Button className="flex-1 sm:flex-none" variant="secondary" onClick={() => void signOut()}><LogOut className="size-4" /> Log out</Button> : <Link className="flex-1 sm:flex-none" href="/login"><Button className="w-full" variant="secondary"><LogIn className="size-4" /> Log in</Button></Link>}</div>
       </div>
 
-      <div className="mt-7 grid grid-cols-2 gap-3 sm:mt-8 xl:grid-cols-4 xl:gap-4">
+      <Card className="mt-7 flex flex-wrap items-center justify-between gap-5 p-5 sm:mt-8">
+        <div className="min-w-0">
+          <p className="text-2xl font-bold text-white sm:text-3xl">
+            {practice.currentStreak} {practice.currentStreak === 1 ? "day" : "days"}
+          </p>
+          <p className="mt-1 text-sm text-slate-400">
+            {practice.practisedToday
+              ? "Practised today"
+              : practice.currentStreak > 0
+                ? "Practise today to keep the streak"
+                : "Reading is built by turning up often — start a streak today"}
+          </p>
+        </div>
+        <div className="flex items-center gap-5">
+          <div className="flex gap-1.5" aria-label={`Practised ${practice.daysThisWeek} of the last seven days`}>
+            {practice.lastSevenDays.map((done, index) => (
+              <span
+                key={index}
+                className={cn("size-3 rounded-full", done ? "bg-teal-400" : "bg-slate-700")}
+                aria-hidden="true"
+              />
+            ))}
+          </div>
+          <p className="text-xs text-slate-400">
+            <span className="block text-sm font-semibold text-white">{practice.bestStreak}</span>
+            best streak
+          </p>
+        </div>
+      </Card>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4">
         {[["Sessions", sessions.length], ["Total notes", totals.notes], ["First-try accuracy", `${Math.round(totals.weightedAccuracy * 100)}%`], ["Average response", formatMilliseconds(totals.averageResponse)]].map(([label, value]) => <Card key={String(label)} className="min-w-0 p-4 sm:p-5"><p className="break-words text-2xl font-bold text-white sm:text-3xl">{value}</p><p className="mt-1 text-xs text-slate-400 sm:text-sm">{label}</p></Card>)}
       </div>
 

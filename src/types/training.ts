@@ -3,6 +3,8 @@ import type { Clef, KeyName, MidiNumber, TargetNote, TrebleRangePreset } from "@
 export type InputSource = "touch" | "computer-keyboard" | "midi";
 export type TrainingMode = "reflex" | "flash" | "sheet";
 export type SessionEndReason = "target-reached" | "user-stopped";
+/** How far the line is allowed to move between notes, in scale degrees. */
+export type MelodicShape = "steps" | "thirds" | "leaps" | "random";
 
 export interface NoteInputEvent {
   midi: MidiNumber;
@@ -63,6 +65,7 @@ export interface TrainingSessionConfig {
   clef: Clef;
   /** Resolved for the session, so a random choice is still recorded as the key it landed on. */
   keySignature: KeyName;
+  melodicShape: MelodicShape;
   rangePreset: TrebleRangePreset;
   minMidi: number;
   maxMidi: number;

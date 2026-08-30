@@ -9,6 +9,7 @@ import { SessionResult } from "@/components/training/SessionResult";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/keys";
+import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
 import { TREBLE_RANGES } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
 import { calculateWeakNoteStats, summarizeTraining } from "@/core/training/scoring";
@@ -21,6 +22,7 @@ import { persistTrainingSession } from "@/lib/sessionPersistence";
 import { loadLocalPreferences } from "@/lib/preferences";
 import type { KeyName, TargetNote, TrebleRangePreset } from "@/types/music";
 import type {
+  MelodicShape,
   NoteInputEvent,
   TrainingSessionConfig,
   TrainingSessionRecord,
@@ -44,6 +46,7 @@ const DEFAULT_CONFIG: TrainingSessionConfig = {
   mode: "reflex",
   clef: "treble",
   keySignature: "C",
+  melodicShape: "random",
   rangePreset: "ledger-1",
   minMidi: 60,
   maxMidi: 81,
@@ -188,6 +191,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       minMidi: configRef.current.minMidi,
       maxMidi: configRef.current.maxMidi,
       keySignature,
+      melodicShape: configRef.current.melodicShape,
       adaptive: configRef.current.adaptive || Boolean(focusMidis?.length),
       avoidImmediateRepeat: true,
       focusMidis,
@@ -276,6 +280,22 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
               {KEY_NAMES.map((name) => (
                 <option key={name} value={name}>
                   {formatKeyName(name)} major · {describeKey(name)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-2 text-sm text-slate-300">
+            <span>Melody</span>
+            <select
+              value={config.melodicShape}
+              onChange={(event) =>
+                setConfig((current) => ({ ...current, melodicShape: event.target.value as MelodicShape }))
+              }
+              className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
+            >
+              {MELODIC_SHAPES.map((shape) => (
+                <option key={shape} value={shape}>
+                  {SHAPE_LABELS[shape]}
                 </option>
               ))}
             </select>

@@ -9,6 +9,7 @@ import { SessionResult } from "@/components/training/SessionResult";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/keys";
+import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
 import { TREBLE_RANGES } from "@/core/music/notes";
 import { createQuarterNoteScore } from "@/core/music/score";
 import { NoteGenerator } from "@/core/training/noteGenerator";
@@ -20,7 +21,7 @@ import { useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useMidi } from "@/hooks/useMidi";
 import { persistTrainingSession } from "@/lib/sessionPersistence";
 import type { KeyName, Score, TrebleRangePreset } from "@/types/music";
-import type { NoteInputEvent, TrainingSessionConfig, TrainingSessionRecord, TrainingSummary, TrainingTrial } from "@/types/training";
+import type { MelodicShape, NoteInputEvent, TrainingSessionConfig, TrainingSessionRecord, TrainingSummary, TrainingTrial } from "@/types/training";
 
 type Phase = "configure" | "running" | "paused" | "complete";
 
@@ -35,6 +36,7 @@ export function SheetTrainer() {
   const [lines, setLines] = useState<number>(4);
   const [keyChoice, setKeyChoice] = useState<KeyName | "random">("C");
   const [keySignature, setKeySignature] = useState<KeyName>("C");
+  const [melodicShape, setMelodicShape] = useState<MelodicShape>("random");
   const [score, setScore] = useState<Score | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const indexRef = useRef(0);
@@ -65,6 +67,7 @@ export function SheetTrainer() {
     mode: "sheet",
     clef: "treble",
     keySignature,
+    melodicShape,
     rangePreset,
     ...range,
     sessionLength: totalNotes,
@@ -73,7 +76,7 @@ export function SheetTrainer() {
     midiSoundEnabled: false,
     computerKeyboardEnabled: true,
     nextNoteDelayMs: 0,
-  }), [keySignature, range, rangePreset, totalNotes]);
+  }), [keySignature, melodicShape, range, rangePreset, totalNotes]);
 
   const finish = useCallback(async (completedTrials: TrainingTrial[]) => {
     phaseRef.current = "complete";
@@ -128,7 +131,7 @@ export function SheetTrainer() {
     // Resolve a random choice now, so the session records the key it landed on.
     const resolvedKey = keyChoice === "random" ? randomKey() : keyChoice;
     setKeySignature(resolvedKey);
-    const generator = new NoteGenerator({ ...range, keySignature: resolvedKey, adaptive: false, avoidImmediateRepeat: true });
+    const generator = new NoteGenerator({ ...range, keySignature: resolvedKey, melodicShape, adaptive: false, avoidImmediateRepeat: true });
     const generated = generator.generateSequence(totalNotes);
     setScore(createQuarterNoteScore(generated));
     trialsRef.current = [];
@@ -170,6 +173,20 @@ export function SheetTrainer() {
             <select value={keyChoice} onChange={(event) => setKeyChoice(event.target.value as KeyName | "random")} className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white">
               <option value="random">Random each session</option>
               {KEY_NAMES.map((name) => <option key={name} value={name}>{formatKeyName(name)} major · {describeKey(name)}</option>)}
+            </select>
+          </label>
+          <label className="space-y-2 text-sm text-slate-300">
+            <span>Melody</span>
+            <select
+              value={melodicShape}
+              onChange={(event) => setMelodicShape(event.target.value as MelodicShape)}
+              className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
+            >
+              {MELODIC_SHAPES.map((shape) => (
+                <option key={shape} value={shape}>
+                  {SHAPE_LABELS[shape]}
+                </option>
+              ))}
             </select>
           </label>
           <label className="block space-y-2 text-sm text-slate-300">
