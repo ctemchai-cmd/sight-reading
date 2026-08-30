@@ -11,6 +11,8 @@ These decisions override older or broader statements elsewhere in this document 
 * Mobile landscape at 800 × 360 is an explicit layout acceptance target: training uses a full-width vertical stack with notation on top and the virtual piano below. Sheet Reading uses a single four-measure row whenever space permits.
 * MIDI permission, status, and device selection live in a persistent top-navigation menu rather than inside the training canvas. The MIDI connection survives client-side navigation between training modes.
 * Reflex Focus Mode keeps the compact app header available for MIDI access while hiding Home, Train, Progress, Settings, and the long brand label. Exit Focus, pause, notation, metrics, and piano remain available.
+* Reflex presents a continuous note stream rather than one note swapped in place. Reading runs left to right, so notes travel right to left: upcoming notes enter at the right edge, the armed note sits under a fixed playhead about a quarter of the way across the staff, and answered notes fade out past the clef. Four to six notes stay visible ahead depending on staff width. The clef and staff lines never move.
+* The stream is still self-paced: it advances only on a correct input, never on a clock. Tempo-driven continuous reading remains Performance mode and stays out of V1.
 * Bluetooth devices are supported when the operating system exposes them to Chrome as a Web MIDI input. V1 will not implement a separate Web Bluetooth/BLE-MIDI protocol stack.
 * V1 remains a complete product slice: Reflex, Sheet Reading, virtual piano, computer keyboard, MIDI, audio, adaptive practice, private Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
 * V1 is a private application. `/train`, `/dashboard`, and `/settings` require a valid non-anonymous Supabase session. Access is granted or revoked by creating or deleting users in the Supabase dashboard; no separate application allowlist is required.
@@ -29,6 +31,7 @@ These decisions override older or broader statements elsewhere in this document 
 * Mistakes means the total number of incorrect note-on inputs.
 * Correct response time runs from the moment the rendered target is armed to the first correct input. Incorrect inputs do not restart that timer.
 * A training trial represents one displayed target; a trial may contain multiple input attempts.
+* In the Reflex stream a note is readable before it is armed, so response time measures the reflex from playhead arrival, not from first sight. This is the intended read-ahead training effect, but it makes Reflex response times recorded before the stream landed non-comparable with later ones. Sheet Reading already had the same read-ahead property.
 
 ### Delivery Order
 
@@ -41,7 +44,7 @@ Implemented in the repository:
 * Next.js 16 App Router application with strict TypeScript, Tailwind CSS, 360 px responsive layouts, installable PWA metadata, production security headers, and a Vercel-compatible build.
 * Music domain types that keep written pitch spelling separate from sounding MIDI pitch.
 * Treble natural-note ranges, MIDI/note conversion, ledger classification, uniform generation, adaptive weighting, trial/attempt scoring, and first-attempt accuracy.
-* Reflex Trainer with 25/50/71/100/endless sessions, pause, focus mode, configurable delay, ledger presets, custom MIDI range, virtual piano, computer keyboard input, results, and weak-note replay.
+* Reflex Trainer as a right-to-left note stream with a fixed playhead, generated lookahead, and 25/50/71/100/endless sessions, pause, focus mode, configurable delay, ledger presets, custom MIDI range, virtual piano, computer keyboard input, results, and weak-note replay.
 * Sheet Reading with four 4/4 measures, sixteen quarter notes, current-note highlighting, and no advance on a wrong input.
 * Responsive VexFlow 5 SVG notation that reflows sheet measures across rows on narrow screens, Tone.js audio initialized by explicit user action, and a normalized input path.
 * Persistent navigation-level Web MIDI permission flow, device selection, connection state handling, Note On/Off parsing, velocity-zero Note Off, channel normalization, and reconnect-safe UI shared by every trainer.
@@ -255,13 +258,13 @@ Train instant recognition of individual notes.
 
 Flow:
 
-1. Display one note on the staff.
-2. Start timer when the note becomes visible.
+1. Display a stream of notes on the staff, with the armed one under the playhead and the next several already readable to its right.
+2. Start timer when the armed note reaches the playhead.
 3. User enters a note.
 4. Determine correct/incorrect.
 5. Record response time.
 6. Give quick visual feedback.
-7. Immediately display another note.
+7. Slide the stream one note to the left so the next note reaches the playhead.
 8. Continue until session target is reached.
 
 Default:
@@ -1195,10 +1198,9 @@ Desktop concept:
 ┌─────────────────────────────────────────────┐
 │ Reflex       18 / 50       Accuracy 96%    │
 ├─────────────────────────────────────────────┤
-│                                             │
-│                TREBLE STAFF                 │
-│                                             │
-│                    ♩                        │
+│        ▓playhead▓                           │
+│  𝄞 ──♩───▓──♩──▓───♩────♩────♩────♩────♩── │
+│    faded ▓armed▓  ← notes travel this way   │
 │                                             │
 │               Current: ?                    │
 │                                             │

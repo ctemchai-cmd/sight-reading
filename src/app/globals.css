@@ -48,6 +48,34 @@ input {
   max-width: 100%;
 }
 
+.staff-layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* The note layer is wider than its window so upcoming notes can slide in from off-screen. */
+.staff-stream-window {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 4.75rem, #000 calc(100% - 2rem), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 4.75rem, #000 calc(100% - 2rem), transparent 100%);
+}
+
+.staff-stream-window svg {
+  max-width: none;
+}
+
+.staff-playhead {
+  position: absolute;
+  top: 10%;
+  bottom: 10%;
+  border-radius: 0.75rem;
+  background: rgb(45 212 191 / 0.14);
+  box-shadow: inset 0 0 0 1px rgb(45 212 191 / 0.3);
+  pointer-events: none;
+}
+
 html[data-focus-mode="true"] .app-primary-navigation,
 html[data-focus-mode="true"] .app-brand-label {
   display: none;

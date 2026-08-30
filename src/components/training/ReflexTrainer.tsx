@@ -28,6 +28,10 @@ import type {
 type Phase = "configure" | "running" | "paused" | "complete";
 type SaveStatus = "saving" | "pending" | "synced";
 
+// How far past the current note the stream stays generated, so the reader always
+// has something to look ahead to.
+const STREAM_LOOKAHEAD = 8;
+
 const DEFAULT_CONFIG: TrainingSessionConfig = {
   mode: "reflex",
   clef: "treble",
@@ -47,7 +51,10 @@ export function ReflexTrainer() {
   const phaseRef = useRef<Phase>("configure");
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const configRef = useRef(config);
-  const [target, setTarget] = useState<TargetNote | null>(null);
+  const [stream, setStream] = useState<TargetNote[]>([]);
+  const streamRef = useRef<TargetNote[]>([]);
+  const [streamIndex, setStreamIndex] = useState(0);
+  const streamIndexRef = useRef(0);
   const [trials, setTrials] = useState<TrainingTrial[]>([]);
   const trialsRef = useRef<TrainingTrial[]>([]);
   const openTrialRef = useRef<OpenTrial | null>(null);
@@ -61,6 +68,7 @@ export function ReflexTrainer() {
   const armedRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { engine, error: audioError, initialize: initializeAudio } = useAudio();
+  const target = stream[streamIndex] ?? null;
 
   useEffect(() => {
     configRef.current = config;
@@ -91,6 +99,7 @@ export function ReflexTrainer() {
 
   const finishSession = useCallback(async (completedTrials: TrainingTrial[], reason: "target-reached" | "user-stopped") => {
     if (completedTrials.length === 0) return;
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     phaseRef.current = "complete";
     setPhase("complete");
     armedRef.current = false;
@@ -112,14 +121,26 @@ export function ReflexTrainer() {
     setSaveStatus(status);
   }, []);
 
-  const showNextTarget = useCallback(() => {
+  const extendStream = useCallback((throughIndex: number) => {
+    const generator = generatorRef.current;
+    if (!generator) return;
+    const stats = calculateWeakNoteStats(trialsRef.current);
+    const next = [...streamRef.current];
+    while (next.length < throughIndex + STREAM_LOOKAHEAD) next.push(generator.generate(stats));
+    if (next.length === streamRef.current.length) return;
+    streamRef.current = next;
+    setStream(next);
+  }, []);
+
+  const advanceStream = useCallback(() => {
     openTrialRef.current = null;
     armedRef.current = false;
     setFeedback(null);
     setAttemptCount(0);
-    const stats = calculateWeakNoteStats(trialsRef.current);
-    setTarget(generatorRef.current?.generate(stats) ?? null);
-  }, []);
+    streamIndexRef.current += 1;
+    setStreamIndex(streamIndexRef.current);
+    extendStream(streamIndexRef.current);
+  }, [extendStream]);
 
   const handleInput = (input: NoteInputEvent) => {
     const currentConfig = configRef.current;
@@ -146,7 +167,7 @@ export function ReflexTrainer() {
       void finishSession(completedTrials, "target-reached");
       return;
     }
-    timeoutRef.current = setTimeout(showNextTarget, currentConfig.nextNoteDelayMs);
+    timeoutRef.current = setTimeout(advanceStream, currentConfig.nextNoteDelayMs);
   };
 
   useMidi(handleInput, (midiNote) => engine.current?.noteOff(midiNote));
@@ -168,11 +189,14 @@ export function ReflexTrainer() {
     setAttemptCount(0);
     openTrialRef.current = null;
     armedRef.current = false;
+    streamRef.current = [];
+    streamIndexRef.current = 0;
+    setStreamIndex(0);
     startedAtRef.current = new Date().toISOString();
     phaseRef.current = "running";
     setPhase("running");
-    setTarget(generatorRef.current.generate());
-  }, [initializeAudio]);
+    extendStream(0);
+  }, [extendStream, initializeAudio]);
 
   const markTargetReady = useCallback(() => {
     if (phaseRef.current !== "running" || !target || openTrialRef.current?.target.id === target.id) return;
@@ -192,6 +216,11 @@ export function ReflexTrainer() {
     phaseRef.current = "running";
     setPhase("running");
     setFeedback(null);
+    if (!target) return;
+    // The stream does not repaint on resume, so re-arm here and time the note from
+    // the moment the reader is looking at it again.
+    openTrialRef.current = createOpenTrial(target, trialsRef.current.length, performance.now());
+    armedRef.current = true;
   };
 
   useEffect(() => () => {
@@ -284,7 +313,9 @@ export function ReflexTrainer() {
 
       <Card className="reflex-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={resume}><Play className="size-4" /> Resume session</Button></div>}
-        {target && <MusicStaff notes={[target]} feedback={feedback} onReady={markTargetReady} />}
+        {stream.length > 0 && (
+          <MusicStaff notes={stream} currentIndex={streamIndex} feedback={feedback} onReady={markTargetReady} />
+        )}
         <div className="training-feedback mt-3 h-6 text-center text-sm font-semibold" aria-live="polite">
           {feedback === "correct" && <span className="text-teal-300">✓ Correct</span>}
           {feedback === "incorrect" && <span className="text-rose-300">✕ Try again</span>}
