@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import manifest from "@/app/manifest";
 
 describe("PWA manifest", () => {
-  it("keeps a stable app identity and launches inside the full app scope", () => {
+  it("takes its identity from the launch URL and covers the full app scope", () => {
     const value = manifest();
 
-    expect(value.id).toBe("/train");
+    // No explicit id: the identity is the start URL, so the two cannot drift apart.
+    expect(value.id).toBeUndefined();
     expect(value.start_url).toBe("/");
     expect(value.scope).toBe("/");
     expect(value.display).toBe("standalone");

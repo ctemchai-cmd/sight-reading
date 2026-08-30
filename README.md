@@ -19,21 +19,21 @@ A Chrome Desktop-first piano sight-reading trainer built with Next.js, VexFlow, 
 
 Training, dashboard, and settings routes fail closed when Supabase is missing or there is no valid non-anonymous Supabase session. The application has no public sign-up route and guest training is disabled, so access is managed by creating or deleting users in the Supabase dashboard. If authentication expires while a session is already open, its result is queued in IndexedDB and retried after the user signs in again.
 
-### Refresh an existing PWA installation
+### Installing on Android
 
-The manifest keeps the previous `/train` app identity but now launches at `/` with scope `/`. After deploying this update, close the installed app and restart Chrome so it refreshes the manifest. Check `about://web-app-internals/` for `manifest_id` and `start_url`. If the operating-system icon still does not launch, remove the old installed app from Chrome and install it again from the production URL; an old OS shortcut can remain stale even when Chrome's “Open in app” action works.
+Android turns the manifest into a real package — a WebAPK minted by Google at
+install time — rather than a shortcut. Two consequences follow.
 
-## Piano samples
+Manifest changes do not appear immediately: Chrome checks for an update about
+once a day, has the package re-minted, and applies it on a later launch. Web
+content still updates on every deploy; only the identity, icon, and orientation
+are baked into the package.
 
-`public/audio/piano/` holds the note recordings the trainer plays. The audio
-engine loads one sample every minor third and lets Tone repitch between them,
-which keeps the decoded buffers small enough for a phone, and it preloads them
-when a trainer mounts so the first key press is not the thing that waits.
-
-If the folder is missing the app falls back to a synth voice rather than
-falling silent. Replacing the set means dropping in files named for their pitch
-with flats spelled `b` — `Eb4.mp3` — covering at least every minor third from
-C2 to C7. Only use a set whose licence permits this project's use.
+An uninstall can leave a dead launcher icon behind that points at a package
+generation that no longer exists — tapping it does nothing while the app still
+opens from the app drawer. Remove that icon and place a fresh one from the
+drawer. `chrome://webapk-internals/` on the device lists the installed package,
+its manifest id, and its update status.
 
 ## Verification
 

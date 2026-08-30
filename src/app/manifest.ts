@@ -5,7 +5,6 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Sight Reading Trainer",
     short_name: "Sight Reader",
     description: "Piano note recognition and sight-reading practice.",
-    id: "/train",
     start_url: "/",
     scope: "/",
     display: "standalone",
