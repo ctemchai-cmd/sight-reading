@@ -22,10 +22,11 @@ Training, dashboard, and settings routes fail closed when Supabase is missing or
 ### Installing on Android
 
 Android turns the manifest into a real package — a WebAPK minted by Google at
-install time — rather than a shortcut. Fields such as `orientation` become
-activity attributes inside that package, so a manifest that is harmless
-elsewhere can change how the app launches here. Two further consequences
-follow.
+install time — rather than a shortcut. Manifest fields become activity
+attributes inside that package, so a manifest that is harmless elsewhere can
+change how the app launches here: declaring `orientation: landscape` once left
+the app unable to launch from its home screen icon at all, though it still
+opened from the app drawer and from Chrome. Two further consequences follow.
 
 Manifest changes do not appear immediately: Chrome checks for an update about
 once a day, has the package re-minted, and applies it on a later launch. Web
