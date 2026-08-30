@@ -4,6 +4,7 @@ import { Maximize2, Pause, Play, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MusicStaff } from "@/components/music/MusicStaff";
 import { PianoKeyboard } from "@/components/music/PianoKeyboard";
+import { FocusSurface } from "@/components/training/FocusSurface";
 import { SessionResult } from "@/components/training/SessionResult";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +14,7 @@ import { calculateWeakNoteStats, summarizeTraining } from "@/core/training/scori
 import { applyInputToTrial, createOpenTrial, type OpenTrial } from "@/core/training/session";
 import { computerKeyboardGuide, useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useAudio } from "@/hooks/useAudio";
+import { useFocusMode } from "@/hooks/useFocusMode";
 import { useMidi } from "@/hooks/useMidi";
 import { persistTrainingSession } from "@/lib/sessionPersistence";
 import { loadLocalPreferences } from "@/lib/preferences";
@@ -63,7 +65,7 @@ export function ReflexTrainer() {
   const [summary, setSummary] = useState<TrainingSummary | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saving");
   const [attemptCount, setAttemptCount] = useState(0);
-  const [focusMode, setFocusMode] = useState(false);
+  const { focusMode, toggleFocusMode } = useFocusMode();
   const startedAtRef = useRef("");
   const armedRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,14 +75,6 @@ export function ReflexTrainer() {
   useEffect(() => {
     configRef.current = config;
   }, [config]);
-
-  useEffect(() => {
-    if (focusMode) document.documentElement.dataset.focusMode = "true";
-    else delete document.documentElement.dataset.focusMode;
-    return () => {
-      delete document.documentElement.dataset.focusMode;
-    };
-  }, [focusMode]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -293,7 +287,12 @@ export function ReflexTrainer() {
   }
 
   return (
-    <div className={focusMode ? "focus-training-surface reflex-training-layout fixed inset-0 z-40 space-y-4 overflow-auto bg-slate-950 px-3 py-4 sm:px-8 sm:py-6" : "reflex-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"}>
+    <FocusSurface
+      active={focusMode}
+      onExit={toggleFocusMode}
+      className="reflex-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"
+    >
+      {!focusMode && (
       <div className="reflex-training-toolbar flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-teal-300">REFLEX</p>
@@ -305,16 +304,17 @@ export function ReflexTrainer() {
           <span><span className="block text-slate-500 sm:inline">Attempts </span>{attemptCount || 1}</span>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="ghost" onClick={() => setFocusMode((active) => !active)}><Maximize2 className="size-4" /> {focusMode ? "Exit focus" : "Focus"}</Button>
+          <Button size="sm" variant="ghost" onClick={toggleFocusMode}><Maximize2 className="size-4" /> Focus</Button>
           {phase === "paused" ? <Button size="sm" onClick={resume}><Play className="size-4" /> Resume</Button> : <Button size="sm" variant="secondary" onClick={pause}><Pause className="size-4" /> Pause</Button>}
           {config.sessionLength === "endless" && <Button size="sm" variant="danger" onClick={() => void finishSession(trialsRef.current, "user-stopped")}><Square className="size-4" /> Finish</Button>}
         </div>
       </div>
+      )}
 
       <Card className="reflex-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={resume}><Play className="size-4" /> Resume session</Button></div>}
         {stream.length > 0 && (
-          <MusicStaff notes={stream} currentIndex={streamIndex} feedback={feedback} onReady={markTargetReady} />
+          <MusicStaff notes={stream} currentIndex={streamIndex} feedback={feedback} fill={focusMode} onReady={markTargetReady} />
         )}
         <div className="training-feedback mt-3 h-6 text-center text-sm font-semibold" aria-live="polite">
           {feedback === "correct" && <span className="text-teal-300">✓ Correct</span>}
@@ -332,6 +332,6 @@ export function ReflexTrainer() {
         />
       </div>
       {audioError && <p className="reflex-training-error text-sm text-amber-300">{audioError}</p>}
-    </div>
+    </FocusSurface>
   );
 }

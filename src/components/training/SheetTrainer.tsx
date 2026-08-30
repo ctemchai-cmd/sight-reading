@@ -1,9 +1,10 @@
 "use client";
 
-import { Pause, Play } from "lucide-react";
+import { Maximize2, Pause, Play } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { MusicStaff } from "@/components/music/MusicStaff";
 import { PianoKeyboard } from "@/components/music/PianoKeyboard";
+import { FocusSurface } from "@/components/training/FocusSurface";
 import { SessionResult } from "@/components/training/SessionResult";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +14,7 @@ import { NoteGenerator } from "@/core/training/noteGenerator";
 import { summarizeTraining } from "@/core/training/scoring";
 import { applyInputToTrial, createOpenTrial, type OpenTrial } from "@/core/training/session";
 import { useAudio } from "@/hooks/useAudio";
+import { useFocusMode } from "@/hooks/useFocusMode";
 import { useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useMidi } from "@/hooks/useMidi";
 import { persistTrainingSession } from "@/lib/sessionPersistence";
@@ -38,6 +40,7 @@ export function SheetTrainer() {
   const startedAtRef = useRef("");
   const armedRef = useRef(false);
   const { engine, initialize: initializeAudio, error: audioError } = useAudio();
+  const { focusMode, toggleFocusMode } = useFocusMode();
   const range = rangePreset === "custom" ? TREBLE_RANGES["ledger-1"] : TREBLE_RANGES[rangePreset];
   const notes = useMemo(
     () => score?.measures.flatMap((measure) => measure.notes.map((note) => note.pitch)) ?? [],
@@ -155,12 +158,21 @@ export function SheetTrainer() {
   }
 
   return (
-    <div className="sheet-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6">
+    <FocusSurface
+      active={focusMode}
+      onExit={toggleFocusMode}
+      className="sheet-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"
+    >
+      {!focusMode && (
       <div className="sheet-training-toolbar flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-sm font-semibold text-teal-300">SHEET READING</p><p className="text-xs text-slate-500">Quarter notes · 4/4</p></div>
         <p className="order-3 w-full rounded-xl bg-slate-900/70 p-2 text-center text-sm text-slate-300 sm:order-none sm:w-auto sm:bg-transparent sm:p-0">Note {currentIndex + 1} / 16 · First try {trials.length ? Math.round(trials.filter((trial) => trial.firstTryCorrect).length / trials.length * 100) : 100}%</p>
-        {phase === "paused" ? <Button size="sm" onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button> : <Button size="sm" variant="secondary" onClick={() => { phaseRef.current = "paused"; armedRef.current = false; openTrialRef.current = null; setPhase("paused"); }}><Pause className="size-4" /> Pause</Button>}
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="ghost" onClick={toggleFocusMode}><Maximize2 className="size-4" /> Focus</Button>
+          {phase === "paused" ? <Button size="sm" onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button> : <Button size="sm" variant="secondary" onClick={() => { phaseRef.current = "paused"; armedRef.current = false; openTrialRef.current = null; setPhase("paused"); }}><Pause className="size-4" /> Pause</Button>}
+        </div>
       </div>
+      )}
       <Card className="sheet-training-staff relative p-3 sm:p-5">
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={() => { phaseRef.current = "running"; setPhase("running"); setArmNonce((value) => value + 1); }}><Play className="size-4" /> Resume</Button></div>}
         {notes.length > 0 && <MusicStaff key={`sheet-${armNonce}`} notes={notes} currentIndex={currentIndex} mode="sheet" feedback={feedback} onReady={markReady} />}
@@ -170,6 +182,6 @@ export function SheetTrainer() {
         <PianoKeyboard minMidi={range.minMidi} maxMidi={range.maxMidi} disabled={phase !== "running"} onNoteOn={(midiNote, velocity) => handleInput({ midi: midiNote, velocity, source: "touch", occurredAtMs: performance.now() })} onNoteOff={(midiNote) => engine.current?.noteOff(midiNote)} />
       </div>
       {audioError && <p className="text-sm text-amber-300">{audioError}</p>}
-    </div>
+    </FocusSurface>
   );
 }

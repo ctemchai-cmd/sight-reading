@@ -20,13 +20,16 @@ const INCORRECT = "#fb7185";
 const SHEET_PLAYED = "#64748b";
 const STREAM_PLAYED = "#94a3b8";
 const SLIDE_MS = 300;
-// Half a quarter-note head, so the playhead centres on the head rather than its left edge.
-const HEAD_CENTER_PX = 6;
 // Five treble lines 10px apart, and VexFlow's default gap between a stave's y and
 // its top line. Three ledger lines either way plus a note head need 35px of
 // clearance, so a stream container shorter than 110px starts clipping F3 and E6.
 const STAVE_LINES_PX = 40;
 const SPACE_ABOVE_STAVE_PX = 41;
+// Filling a focus-mode container means scaling the notation up rather than
+// floating a small staff in a tall box. Past this the notes read as stretched
+// against the unchanged horizontal spacing.
+const BASE_STREAM_HEIGHT = 150;
+const MAX_FILL_SCALE = 2.2;
 
 interface MusicStaffProps {
   notes: TargetNote[];
@@ -34,6 +37,8 @@ interface MusicStaffProps {
   mode?: "stream" | "sheet";
   feedback?: "correct" | "incorrect" | null;
   onReady?: () => void;
+  /** Stream only: take the container's height and scale the notation to match. */
+  fill?: boolean;
   className?: string;
 }
 
@@ -79,6 +84,7 @@ export function MusicStaff({
   mode = "stream",
   feedback,
   onReady,
+  fill = false,
   className,
 }: MusicStaffProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -89,12 +95,22 @@ export function MusicStaff({
   const drawnIndexRef = useRef(-1);
   const slideRef = useRef<Animation | null>(null);
   const [width, setWidth] = useState(mode === "stream" ? 720 : 1050);
+  const [availableHeight, setAvailableHeight] = useState(0);
   const [compactLandscape, setCompactLandscape] = useState(false);
+  // Read back from the drawn note rather than recomputed, so the marker tracks
+  // the head through VexFlow's own stave and formatter offsets.
+  const [headCenterX, setHeadCenterX] = useState<number | null>(null);
 
   const geometry = useMemo(() => streamGeometry(width), [width]);
-  const staffHeight = compactLandscape ? 118 : 150;
-  // Centre the stave so both ledger directions get equal room.
-  const staveY = Math.round((staffHeight - STAVE_LINES_PX) / 2) - SPACE_ABOVE_STAVE_PX;
+  const filling = fill && mode === "stream" && availableHeight > 0;
+  const staffHeight = filling ? availableHeight : compactLandscape ? 118 : 150;
+  const scale = filling
+    ? Math.min(MAX_FILL_SCALE, Math.max(1, staffHeight / BASE_STREAM_HEIGHT))
+    : 1;
+  // Work in the scaled-down coordinate space, then centre the stave so both
+  // ledger directions get equal room.
+  const innerWidth = width / scale;
+  const staveY = Math.round((staffHeight / scale - STAVE_LINES_PX) / 2) - SPACE_ABOVE_STAVE_PX;
 
   useEffect(() => {
     readyRef.current = onReady;
@@ -103,7 +119,10 @@ export function MusicStaff({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(280, Math.floor(entry.contentRect.width))));
+    const observer = new ResizeObserver(([entry]) => {
+      setWidth(Math.max(280, Math.floor(entry.contentRect.width)));
+      setAvailableHeight(Math.floor(entry.contentRect.height));
+    });
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
@@ -124,10 +143,11 @@ export function MusicStaff({
     const renderer = new Renderer(layer, Renderer.Backends.SVG);
     renderer.resize(width, staffHeight);
     const context = renderer.getContext();
+    context.scale(scale, scale);
     context.setFillStyle(INK);
     context.setStrokeStyle(INK);
-    new Stave(8, staveY, width - 16).addClef("treble").setContext(context).draw();
-  }, [mode, staffHeight, staveY, width]);
+    new Stave(8, staveY, innerWidth - 16).addClef("treble").setContext(context).draw();
+  }, [innerWidth, mode, scale, staffHeight, staveY, width]);
 
   useEffect(() => {
     const layer = streamLayerRef.current;
@@ -137,14 +157,16 @@ export function MusicStaff({
     const renderer = new Renderer(layer, Renderer.Backends.SVG);
     renderer.resize(playheadX + (lead + 1) * spacing + 40, staffHeight);
     const context = renderer.getContext();
+    context.scale(scale, scale);
     // Notes need a stave to place their heads; the visible one lives in the static layer.
-    const stave = new Stave(8, staveY, width - 16);
+    const stave = new Stave(8, staveY, innerWidth - 16);
     // VexFlow offsets every note by the stave's note-start position, so cancel it out
     // to land note heads exactly on the positions this layout computed.
     const originX = stave.getNoteStartX();
 
     const first = Math.max(0, currentIndex - trail);
     const last = Math.min(notes.length - 1, currentIndex + lead);
+    let currentNote: StaveNote | null = null;
     for (let index = first; index <= last; index += 1) {
       const color =
         index < currentIndex
@@ -161,8 +183,13 @@ export function MusicStaff({
       new TickContext()
         .addTickable(vexNote)
         .preFormat()
-        .setX(playheadX + (index - currentIndex) * spacing - originX);
+        .setX((playheadX + (index - currentIndex) * spacing) / scale - originX);
       vexNote.draw();
+      if (index === currentIndex) currentNote = vexNote;
+    }
+    if (currentNote) {
+      const note: StaveNote = currentNote;
+      setHeadCenterX((note.getAbsoluteX() + note.getGlyphWidth() / 2) * scale);
     }
 
     // The layer rests at the drawn position, so advancing only needs to replay the
@@ -179,7 +206,7 @@ export function MusicStaff({
 
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
-  }, [currentIndex, feedback, geometry, mode, notes, staffHeight, staveY, width]);
+  }, [currentIndex, feedback, geometry, innerWidth, mode, notes, scale, staffHeight, staveY]);
 
   useEffect(() => {
     const layer = sheetLayerRef.current;
@@ -237,8 +264,8 @@ export function MusicStaff({
   return (
     <div
       ref={containerRef}
-      style={mode === "stream" ? { height: staffHeight } : undefined}
-      className={`music-staff relative w-full overflow-hidden rounded-xl bg-white/95 ${mode === "sheet" ? "min-h-45" : ""} ${className ?? ""}`}
+      style={mode === "stream" && !fill ? { height: staffHeight } : undefined}
+      className={`music-staff relative w-full overflow-hidden rounded-xl bg-white/95 ${mode === "sheet" ? "min-h-45" : fill ? "h-full" : ""} ${className ?? ""}`}
       aria-label={
         mode === "stream"
           ? `Treble-clef note stream, note ${currentIndex + 1}`
@@ -251,7 +278,7 @@ export function MusicStaff({
           <div
             className="staff-playhead"
             style={{
-              left: geometry.playheadX + HEAD_CENTER_PX - geometry.spacing * 0.34,
+              left: (headCenterX ?? geometry.playheadX) - geometry.spacing * 0.34,
               width: geometry.spacing * 0.68,
             }}
           />
