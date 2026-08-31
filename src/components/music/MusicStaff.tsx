@@ -62,6 +62,8 @@ interface MusicStaffProps {
   /** Sheet only: mark the note whose beat is active without moving the notation. */
   beatCursor?: boolean;
   beatCursorRunning?: boolean;
+  /** Sweep in from the clef towards the first note instead of note to note. */
+  beatCursorLeadIn?: boolean;
   beatDurationMs?: number;
   beatStartedAtMs?: number;
   performanceFeedbacks?: PerformanceFeedbackEvent[];
@@ -141,6 +143,7 @@ export function MusicStaff({
   feedback,
   beatCursor = false,
   beatCursorRunning = false,
+  beatCursorLeadIn = false,
   beatDurationMs = 0,
   beatStartedAtMs = 0,
   performanceFeedbacks = EMPTY_PERFORMANCE_FEEDBACKS,
@@ -167,6 +170,7 @@ export function MusicStaff({
   // Where notes may start: past the clef and whatever the key signature draws.
   const [noteStartX, setNoteStartX] = useState(0);
   const [sheetCursorPositions, setSheetCursorPositions] = useState<CursorGeometry[]>([]);
+  const [sheetCursorLeadIn, setSheetCursorLeadIn] = useState<CursorGeometry | null>(null);
 
   const streaming = mode === "stream" || mode === "flash";
   const geometry = useMemo(() => streamGeometry(width, mode === "flash", noteStartX), [mode, noteStartX, width]);
@@ -369,6 +373,12 @@ export function MusicStaff({
               width: cursorWidth * scale,
               height: (stave.getYForLine(4) - top + 16) * scale,
             };
+            // Somewhere for the cursor to come from when a page turns: sweeping
+            // in from the clef reads as a run-up and gives the eye a beat on the
+            // line before the first note is due.
+            if (index === 0) {
+              setSheetCursorLeadIn({ ...cursorPositions[index], left: stave.getX() * scale });
+            }
             // The final note needs somewhere to travel during its own beat.
             // Without this off-score destination the cursor reached the last
             // head one beat early and appeared to wait there before page turn.
@@ -407,8 +417,10 @@ export function MusicStaff({
     return () => cancelAnimationFrame(frame);
   }, [beatCursor, clef, compactLandscape, fill, keySignature, mode, notes, sheetRenderFeedback, sheetRenderIndex, width]);
 
-  const sheetCursor = sheetCursorPositions[currentIndex] ?? null;
-  const nextSheetCursor = sheetCursorPositions[currentIndex + 1] ?? null;
+  const leadingIn = beatCursorLeadIn && sheetCursorLeadIn !== null;
+  const sheetCursor = (leadingIn ? sheetCursorLeadIn : sheetCursorPositions[currentIndex]) ?? null;
+  const nextSheetCursor =
+    (leadingIn ? sheetCursorPositions[currentIndex] : sheetCursorPositions[currentIndex + 1]) ?? null;
   const performanceFeedbackLayers = performanceFeedbacks.flatMap((event) => {
     const geometry = sheetCursorPositions[event.noteIndex];
     if (!geometry) return [];

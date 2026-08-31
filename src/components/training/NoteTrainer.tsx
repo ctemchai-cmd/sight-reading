@@ -135,6 +135,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const hitRef = useRef<TrainingTrial | null>(null);
   // True while a beat is being spent on a page turn rather than on a note.
   const pageRestRef = useRef(false);
+  const [pageRest, setPageRest] = useState(false);
   const pendingPerformanceTrialRef = useRef<PendingPerformanceTrial | null>(null);
   const startedAtRef = useRef("");
   const armedRef = useRef(false);
@@ -314,6 +315,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       // The turn's beat. The new line is already on screen and the pulse has
       // carried on, but nothing was due, so nothing was scored.
       pageRestRef.current = false;
+      setPageRest(false);
       engine.current?.click(false);
       if (!consumePendingPerformanceTrial(scheduledAt)) armAt(scheduledAt);
     } else {
@@ -331,6 +333,10 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
         // Spend this beat showing the new line rather than demanding its first
         // note, which would otherwise arrive the instant the page turned.
         pageRestRef.current = true;
+        setPageRest(true);
+        // The turn's beat still needs a start time, or the cursor has nothing to
+        // sweep across and simply waits at the note it is heading for.
+        setBeatStartedAtMs(scheduledAt);
         openTrialRef.current = null;
         armedRef.current = false;
         hitRef.current = null;
@@ -533,6 +539,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     if (timed) {
       hitRef.current = null;
       pageRestRef.current = false;
+      setPageRest(false);
       countInRef.current = COUNT_IN_BEATS;
       setCountIn(COUNT_IN_BEATS);
       beatAtRef.current = performance.now();
@@ -568,6 +575,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       hitRef.current = null;
       pendingPerformanceTrialRef.current = null;
       pageRestRef.current = false;
+      setPageRest(false);
       countInRef.current = COUNT_IN_BEATS;
       setCountIn(COUNT_IN_BEATS);
       beatAtRef.current = performance.now();
@@ -774,6 +782,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
             feedback={feedback}
             beatCursor={timed}
             beatCursorRunning={timed && phase === "running" && countIn === 0}
+            beatCursorLeadIn={pageRest}
             beatDurationMs={timed ? 60000 / config.tempoBpm : undefined}
             beatStartedAtMs={timed ? beatStartedAtMs : undefined}
             performanceFeedbacks={timed ? visiblePerformanceFeedbacks : undefined}
