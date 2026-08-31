@@ -96,6 +96,16 @@ textarea,
   pointer-events: none;
 }
 
+.sheet-beat-cursor {
+  position: absolute;
+  z-index: 0;
+  border: 1px solid rgb(13 148 136 / 0.42);
+  border-radius: 0.5rem;
+  background: rgb(45 212 191 / 0.16);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.38) inset;
+  pointer-events: none;
+}
+
 /* Focus mode gives the whole viewport to the staff and keyboard. The MIDI menu
    goes with the header, but the connection is held by the provider and survives;
    Exit Focus in the training toolbar brings the menu back. */

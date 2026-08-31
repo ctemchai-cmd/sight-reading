@@ -5,8 +5,8 @@ natively; Claude Code reads it through the one-line `@AGENTS.md` import in
 `CLAUDE.md`. Put project rules **here**, never in `CLAUDE.md`.
 
 A web app that trains piano sight-reading reflexes: notation → recognition →
-physical response → accuracy → speed. Treble clef, natural notes, private
-single-user deployment on Vercel.
+physical response → accuracy → speed. Treble and bass clefs, major key
+signatures, private single-user deployment on Vercel.
 
 `docs/project_info.txt` is the product specification. Its
 "Current V1 Implementation Decisions" section overrides anything later in that

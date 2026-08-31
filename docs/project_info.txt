@@ -1,6 +1,6 @@
 # Project Specification — Sight Reading Trainer
 
-## Current V1 Implementation Decisions (Updated 2026-08-30)
+## Current V1 Implementation Decisions (Updated 2026-08-31)
 
 These decisions override older or broader statements elsewhere in this document where they conflict.
 
@@ -11,16 +11,16 @@ These decisions override older or broader statements elsewhere in this document 
 * Responsive mobile layout includes compact navigation, stacked cards and controls, reflowed sheet-music measures, responsive dashboard charts, and a wrapped pitch heatmap. Chrome Desktop + USB MIDI remains the formally supported training path.
 * Mobile landscape at 800 × 360 is an explicit layout acceptance target: training uses a full-width vertical stack with notation on top and the virtual piano below. Sheet Reading uses a single four-measure row whenever space permits.
 * MIDI permission, status, and device selection live in a persistent top-navigation menu rather than inside the training canvas. The MIDI connection survives client-side navigation between training modes.
-* Focus Mode is available in both Reflex and Sheet Reading. It hides the application header outright, MIDI menu included, and the training toolbar with it, so only the notation and the virtual piano remain. This reverses the earlier decision to keep a compact header for MIDI access: the connection is owned by the layout-level provider and survives, and leaving focus brings the menu, the session counters, and pause back.
+* Focus Mode is available in every training mode. It hides the application header outright, MIDI menu included, and the training toolbar with it, so only the notation and the virtual piano remain. This reverses the earlier decision to keep a compact header for MIDI access: the connection is owned by the layout-level provider and survives, and leaving focus brings the menu, the session counters, and pause back.
 * The only control inside Focus Mode is a small icon-only Exit Focus button overlaying the top-right of the notation, positioned so it costs no layout space. Correct and incorrect verdicts stay legible through note colour, and the verdict text is kept for screen readers only.
 * Reflex notation scales up to fill the height Focus Mode frees, to a ceiling beyond which it reads as stretched against the unchanged horizontal spacing. Leftover height goes to the virtual piano. Sheet Reading keeps its natural notation size for now.
-* Performance mode takes the pacing away from the player. A metronome counts four beats in and then moves the stream on every beat whether or not the note was played, which is the part of reading that a self-paced drill cannot train: continuing. Not stopping to correct a mistake is the habit it builds, and the habit the other modes necessarily build against.
+* Performance mode takes the pacing away from the player. A metronome counts four beats in and then advances a beat cursor across a fixed four-measure/16-quarter-note sheet system whether or not the note was played. The notation does not slide: only the cursor moves on the beat, and completing a system replaces it with the next one. This more closely resembles reading a real score while retaining the continuous-reading rule. Not stopping to correct a mistake is the habit it builds, and the habit the other modes necessarily build against.
 * A note that goes by unplayed is still a trial, with no response time — the field is nullable rather than filled with the length of the beat, which would quietly corrupt every median built on it. Sessions report how many were missed.
 * Playing early is wrong, not merely early: input is scored against the note under the beat at the time it arrives. There is no tolerance window in V1.
 * Flash and Reflex are the two self-paced single-target modes and score identically; only the presentation differs. Flash shows one centred note that is replaced the moment it is answered. Reflex presents a continuous note stream rather than one note swapped in place. Reading runs left to right, so notes travel right to left: upcoming notes enter at the right edge, the armed note sits under a fixed playhead about a quarter of the way across the staff, and answered notes fade out past the clef. Four to six notes stay visible ahead depending on staff width. The clef and staff lines never move.
 * Reflex and Flash are self-paced: they advance only on a correct input, never on a clock.
 * Bluetooth devices are supported when the operating system exposes them to Chrome as a Web MIDI input. V1 will not implement a separate Web Bluetooth/BLE-MIDI protocol stack.
-* V1 remains a complete product slice: Reflex, Sheet Reading, virtual piano, computer keyboard, MIDI, audio, adaptive practice, private Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
+* V1 remains a complete product slice: Flash, Reflex, Sheet Reading, Performance, virtual piano, computer keyboard, MIDI, audio, adaptive practice, private Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
 * V1 is a private application. `/train`, `/dashboard`, and `/settings` require a valid non-anonymous Supabase session. Access is granted or revoked by creating or deleting users in the Supabase dashboard; no separate application allowlist is required.
 * Public sign-up and guest training are disabled. The application does not expose a `/signup` route. Approved accounts are created manually by the owner in Supabase, and public user registration must be disabled in Supabase Authentication settings.
 * The application fails closed if Supabase public configuration is absent or the request has no valid authenticated session. The landing page, login page, and authentication callback remain public.
@@ -60,14 +60,14 @@ These decisions override older or broader statements elsewhere in this document 
 
 Build V1 as deployable vertical milestones: foundation and core logic, playable Reflex, MIDI/audio, Sheet Reading, Supabase persistence, adaptive training/dashboard, then production hardening. Each milestone must remain deployable to Vercel.
 
-### Current Implementation Status (Updated 2026-08-30)
+### Current Implementation Status (Updated 2026-08-31)
 
 Implemented in the repository:
 
 * Next.js 16 App Router application with strict TypeScript, Tailwind CSS, 360 px responsive layouts, installable PWA metadata, production security headers, and a Vercel-compatible build.
 * Music domain types that keep written pitch spelling separate from sounding MIDI pitch.
 * Major key signatures from C to six sharps or six flats, key-aware spelling and scale membership, treble and bass ranges, MIDI/note conversion, ledger classification, uniform generation, adaptive weighting, trial/attempt scoring, and first-attempt accuracy.
-* Performance mode with a counted-in metronome, selectable tempo from 40 to 120 BPM, and missed notes recorded as trials without a response time.
+* Performance mode with a counted-in metronome, selectable tempo from 40 to 120 BPM, a fixed four-measure sheet whose beat cursor advances in time, and missed notes recorded as trials without a response time.
 * Reflex Trainer as a right-to-left note stream with a fixed playhead, generated lookahead, and 25/50/71/100/endless sessions, pause, focus mode, configurable delay, ledger presets, custom MIDI range, virtual piano, computer keyboard input, results, and weak-note replay.
 * Sheet Reading runs two, four, or five lines of four 4/4 measures — sixteen quarter notes each — but shows one line at a time, replacing it with the next once it is read. The notation scales up into whatever height is spare, bounded by the room a measure needs before its notes collide; four measures across a row is the real ceiling on how large it can draw. Compact landscape keeps its tuned size, having no spare height to give. A single system stays legible at full size rather than shrinking five onto a phone. Current-note highlighting, focus mode, and no advance on a wrong input all still apply, and the staff still scrolls when a narrow screen wraps one line onto several rows.
 * Responsive VexFlow 5 SVG notation that reflows sheet measures across rows on narrow screens, a piano-shaped Tone.js synth voice initialized by explicit user action, and a normalized input path.
@@ -497,15 +497,13 @@ Advance on wrong note: OFF
 
 Default:
 
-Wrong note does NOT advance.
-
-Future performance mode may behave differently.
+Wrong notes do not advance Flash, Reflex, or Sheet Reading. Performance is the
+deliberate exception: musical time advances whether the expected note is played
+or missed.
 
 ---
 
 # 11. Mode C — Performance / Continuous Reading
-
-Create architecture for this mode but it does not need to be fully featured in the first implementation.
 
 Goal:
 
@@ -516,22 +514,26 @@ Rules:
 * Music continues at a fixed tempo.
 * User should not stop.
 * Wrong notes are recorded but do not pause the exercise.
-* Cursor continues according to musical time.
+* A four-beat count-in establishes the pulse.
+* A fixed system shows four 4/4 measures of quarter notes at a time.
+* Notation stays still while a visible cursor advances according to musical time.
+* Completing a system replaces it with the next one.
+* A note that passes unplayed is recorded without a response time.
 
-Future settings:
+Tempo settings:
 
 ```txt
 40 BPM
 50 BPM
 60 BPM
-80 BPM
+72 BPM
+84 BPM
 100 BPM
 120 BPM
 ```
 
-Metronome support should be possible.
-
-Do NOT make this a blocking requirement for initial MVP.
+The cursor changes position on the beat without a sliding animation, so its
+visual location and the scoring window remain aligned.
 
 ---
 

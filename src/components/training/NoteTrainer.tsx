@@ -12,6 +12,7 @@ import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/k
 import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
 import { formatClef, resolveRange } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
+import { getPerformancePage, performancePageLastIndex } from "@/core/training/performance";
 import { calculateWeakNoteStats, mergeNoteStats, summarizeTraining } from "@/core/training/scoring";
 import { applyInputToTrial, createOpenTrial, missTrial, type OpenTrial } from "@/core/training/session";
 import { computerKeyboardGuide, useComputerKeyboard } from "@/hooks/useComputerKeyboard";
@@ -173,11 +174,16 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     if (!generator) return;
     const stats = mergeNoteStats(historyRef.current, calculateWeakNoteStats(trialsRef.current));
     const next = [...streamRef.current];
-    while (next.length < throughIndex + STREAM_LOOKAHEAD) next.push(generator.generate(stats));
+    const sessionLength = configRef.current.sessionLength;
+    const finiteLastIndex = sessionLength === "endless" ? Number.POSITIVE_INFINITY : sessionLength - 1;
+    const desiredLastIndex = timed
+      ? performancePageLastIndex(throughIndex, sessionLength)
+      : Math.min(throughIndex + STREAM_LOOKAHEAD - 1, finiteLastIndex);
+    while (next.length <= desiredLastIndex) next.push(generator.generate(stats));
     if (next.length === streamRef.current.length) return;
     streamRef.current = next;
     setStream(next);
-  }, []);
+  }, [timed]);
 
   const advanceStream = useCallback(() => {
     openTrialRef.current = null;
@@ -491,6 +497,10 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     return <div className="px-4 py-8 sm:px-6 sm:py-10"><SessionResult summary={summary} syncStatus={saveStatus} onRetry={() => { phaseRef.current = "configure"; setPhase("configure"); }} onPracticeWeak={() => void startSession(summary.weakNotes.slice(0, 5).map((note) => note.midi))} /></div>;
   }
 
+  const performancePage = timed ? getPerformancePage(stream, streamIndex) : null;
+  const visibleNotes = performancePage?.notes ?? stream;
+  const visibleIndex = performancePage?.currentIndex ?? streamIndex;
+
   return (
     <FocusSurface
       active={focusMode}
@@ -527,14 +537,15 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
           </div>
         )}
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={resume}><Play className="size-4" /> Resume session</Button></div>}
-        {stream.length > 0 && (
+        {visibleNotes.length > 0 && (
           <MusicStaff
-            notes={stream}
-            currentIndex={streamIndex}
-            mode={mode === "flash" ? "flash" : "stream"}
+            notes={visibleNotes}
+            currentIndex={visibleIndex}
+            mode={timed ? "sheet" : mode === "flash" ? "flash" : "stream"}
             keySignature={config.keySignature}
             clef={config.clef}
             feedback={feedback}
+            beatCursor={timed}
             fill={focusMode}
             onReady={markTargetReady}
           />

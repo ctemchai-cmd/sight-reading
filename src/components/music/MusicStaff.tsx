@@ -47,6 +47,8 @@ interface MusicStaffProps {
   keySignature?: KeyName;
   clef?: Clef;
   feedback?: "correct" | "incorrect" | null;
+  /** Sheet only: mark the note whose beat is active without moving the notation. */
+  beatCursor?: boolean;
   onReady?: () => void;
   /** Stream only: take the container's height and scale the notation to match. */
   fill?: boolean;
@@ -58,6 +60,13 @@ interface StreamGeometry {
   trail: number;
   playheadX: number;
   spacing: number;
+}
+
+interface SheetCursorGeometry {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
 /**
@@ -102,6 +111,7 @@ export function MusicStaff({
   keySignature = "C",
   clef = "treble",
   feedback,
+  beatCursor = false,
   onReady,
   fill = false,
   className,
@@ -121,6 +131,7 @@ export function MusicStaff({
   const [headCenterX, setHeadCenterX] = useState<number | null>(null);
   // Where notes may start: past the clef and whatever the key signature draws.
   const [noteStartX, setNoteStartX] = useState(0);
+  const [sheetCursor, setSheetCursor] = useState<SheetCursorGeometry | null>(null);
 
   const streaming = mode === "stream" || mode === "flash";
   const geometry = useMemo(() => streamGeometry(width, mode === "flash", noteStartX), [mode, noteStartX, width]);
@@ -271,6 +282,7 @@ export function MusicStaff({
       return stave.setContext(context);
     });
     const prefixes = staves.map((stave) => stave.getNoteStartX() - stave.getX());
+    let nextCursor: SheetCursorGeometry | null = null;
 
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
       const firstInRow = rowIndex * measuresPerRow;
@@ -293,7 +305,9 @@ export function MusicStaff({
             index === currentIndex
               ? feedback === "incorrect"
                 ? INCORRECT
-                : CORRECT
+                : feedback === "correct" || !beatCursor
+                  ? CORRECT
+                  : INK
               : index < currentIndex
                 ? SHEET_PLAYED
                 : INK;
@@ -302,9 +316,22 @@ export function MusicStaff({
         const voice = new Voice({ numBeats: targets.length, beatValue: 4 }).addTickables(vexNotes);
         new Formatter().joinVoices([voice]).format([voice], Math.max(60, noteSpace - 14));
         voice.draw(context, stave);
+        if (beatCursor && currentIndex >= start && currentIndex < start + targets.length) {
+          const currentNote = vexNotes[currentIndex - start];
+          const cursorWidth = Math.min(42, Math.max(24, noteSpace * 0.18));
+          const top = stave.getYForLine(0) - 16;
+          nextCursor = {
+            left: (currentNote.getAbsoluteX() + currentNote.getGlyphWidth() / 2 - cursorWidth / 2) * scale,
+            top: top * scale,
+            width: cursorWidth * scale,
+            height: (stave.getYForLine(4) - top + 16) * scale,
+          };
+        }
         x += prefixes[measureIndex] + noteSpace;
       }
     }
+
+    setSheetCursor(nextCursor);
 
     // Several systems will not fit at once, so keep the cursor's line in view.
     const view = containerRef.current;
@@ -319,7 +346,7 @@ export function MusicStaff({
 
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
-  }, [clef, compactLandscape, currentIndex, feedback, fill, keySignature, mode, notes, width]);
+  }, [beatCursor, clef, compactLandscape, currentIndex, feedback, fill, keySignature, mode, notes, width]);
 
   return (
     <div
@@ -352,7 +379,21 @@ export function MusicStaff({
           </div>
         </>
       ) : (
-        <div ref={sheetLayerRef} />
+        <div className="relative">
+          {beatCursor && sheetCursor && (
+            <div
+              className="sheet-beat-cursor"
+              style={{
+                left: sheetCursor.left,
+                top: sheetCursor.top,
+                width: sheetCursor.width,
+                height: sheetCursor.height,
+              }}
+              aria-hidden="true"
+            />
+          )}
+          <div ref={sheetLayerRef} className="relative z-10" />
+        </div>
       )}
     </div>
   );
