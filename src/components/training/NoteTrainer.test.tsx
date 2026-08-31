@@ -125,4 +125,60 @@ describe("NoteTrainer clock lifecycle", () => {
     expect(trainingHarness.staffProps?.currentIndex).toBe(1);
     expect(trainingHarness.staffProps?.performanceFeedback).toMatchObject({ noteIndex: 1, kind: "perfect" });
   });
+
+  it("switches the scoring zone at the midpoint between notes", async () => {
+    render(<NoteTrainer mode="performance" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Start training/i }));
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(3_600));
+
+    const currentMidi = trainingHarness.staffProps?.notes[0]?.expectedMidi;
+    const nextMidi = trainingHarness.staffProps?.notes[1]?.expectedMidi;
+    const firstBeatAt = performance.now();
+    expect(currentMidi).toBeDefined();
+    expect(nextMidi).toBeDefined();
+
+    await act(async () => {
+      trainingHarness.midiNoteOn?.({
+        midi: currentMidi!,
+        velocity: 100,
+        source: "midi",
+        occurredAtMs: firstBeatAt,
+      });
+    });
+    await act(async () => {
+      trainingHarness.midiNoteOn?.({
+        midi: nextMidi!,
+        velocity: 100,
+        source: "midi",
+        occurredAtMs: firstBeatAt + 599,
+      });
+    });
+    expect(trainingHarness.staffProps?.performanceFeedback).toMatchObject({ noteIndex: 0, kind: "wrong" });
+
+    await act(async () => {
+      trainingHarness.midiNoteOn?.({
+        midi: nextMidi!,
+        velocity: 100,
+        source: "midi",
+        occurredAtMs: firstBeatAt + 600,
+      });
+    });
+    expect(trainingHarness.staffProps?.performanceFeedback).toMatchObject({ noteIndex: 1, kind: "bad" });
+
+    act(() => vi.advanceTimersByTime(1_200));
+    expect(trainingHarness.staffProps?.currentIndex).toBe(1);
+    await act(async () => {
+      trainingHarness.midiNoteOn?.({
+        midi: nextMidi!,
+        velocity: 100,
+        source: "midi",
+        occurredAtMs: performance.now(),
+      });
+    });
+    expect(trainingHarness.staffProps?.performanceFeedback).toMatchObject({ noteIndex: 1, kind: "bad" });
+  });
 });

@@ -2,6 +2,17 @@ import type { PerformanceTimingGrade } from "@/types/training";
 
 export const PERFORMANCE_NOTES_PER_LINE = 16;
 export const PERFORMANCE_TIMING_GRADE_ORDER = ["perfect", "great", "cool", "bad", "miss"] as const;
+export const PERFORMANCE_LOOKAHEAD_RATIO = 0.5;
+
+export function isPerformanceLookaheadWindow(
+  inputAtMs: number,
+  nextBeatAtMs: number,
+  beatDurationMs: number,
+): boolean {
+  if (beatDurationMs <= 0) return false;
+  return inputAtMs >= nextBeatAtMs - beatDurationMs * PERFORMANCE_LOOKAHEAD_RATIO
+    && inputAtMs < nextBeatAtMs;
+}
 
 export function performanceBeatProgress(
   nowMs: number,
@@ -13,8 +24,8 @@ export function performanceBeatProgress(
 }
 
 /**
- * Timing windows scale with tempo. At 60 BPM they are 120/250/500 ms; the
- * remaining part of the beat is Bad, and an unanswered beat is Miss.
+ * A note owns half a beat on either side of its pulse. Grades divide that
+ * symmetric window so both early and late hits can reach every verdict.
  */
 export function gradePerformanceTiming(
   timingOffsetMs: number | null,
@@ -22,9 +33,9 @@ export function gradePerformanceTiming(
 ): PerformanceTimingGrade {
   if (timingOffsetMs === null) return "miss";
   const distance = Math.abs(timingOffsetMs) / beatDurationMs;
-  if (distance <= 0.12) return "perfect";
-  if (distance <= 0.25) return "great";
-  if (distance <= 0.5) return "cool";
+  if (distance <= 0.1) return "perfect";
+  if (distance <= 0.2) return "great";
+  if (distance <= 0.35) return "cool";
   return "bad";
 }
 

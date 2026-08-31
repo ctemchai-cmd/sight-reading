@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getPerformancePage,
   gradePerformanceTiming,
+  isPerformanceLookaheadWindow,
   performanceBeatProgress,
   performancePageLastIndex,
 } from "@/core/training/performance";
@@ -20,10 +21,10 @@ describe("performance sheet paging", () => {
   });
 
   it("grades distance from the beat relative to tempo", () => {
-    expect(gradePerformanceTiming(120, 1_000)).toBe("perfect");
-    expect(gradePerformanceTiming(250, 1_000)).toBe("great");
-    expect(gradePerformanceTiming(500, 1_000)).toBe("cool");
-    expect(gradePerformanceTiming(800, 1_000)).toBe("bad");
+    expect(gradePerformanceTiming(-100, 1_000)).toBe("perfect");
+    expect(gradePerformanceTiming(200, 1_000)).toBe("great");
+    expect(gradePerformanceTiming(-350, 1_000)).toBe("cool");
+    expect(gradePerformanceTiming(500, 1_000)).toBe("bad");
     expect(gradePerformanceTiming(null, 1_000)).toBe("miss");
   });
 
@@ -31,5 +32,12 @@ describe("performance sheet paging", () => {
     expect(performanceBeatProgress(1_250, 1_000, 1_000)).toBe(0.25);
     expect(performanceBeatProgress(900, 1_000, 1_000)).toBe(0);
     expect(performanceBeatProgress(2_500, 1_000, 1_000)).toBe(1);
+  });
+
+  it("opens the next target after the cursor crosses the midpoint", () => {
+    expect(isPerformanceLookaheadWindow(1_499, 2_000, 1_000)).toBe(false);
+    expect(isPerformanceLookaheadWindow(1_500, 2_000, 1_000)).toBe(true);
+    expect(isPerformanceLookaheadWindow(1_999, 2_000, 1_000)).toBe(true);
+    expect(isPerformanceLookaheadWindow(2_000, 2_000, 1_000)).toBe(false);
   });
 });

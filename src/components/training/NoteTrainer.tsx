@@ -12,7 +12,12 @@ import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/k
 import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
 import { formatClef, resolveRange } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
-import { PERFORMANCE_NOTES_PER_LINE, gradePerformanceTiming, performancePageLastIndex } from "@/core/training/performance";
+import {
+  PERFORMANCE_NOTES_PER_LINE,
+  gradePerformanceTiming,
+  isPerformanceLookaheadWindow,
+  performancePageLastIndex,
+} from "@/core/training/performance";
 import { calculateWeakNoteStats, mergeNoteStats, summarizeTraining } from "@/core/training/scoring";
 import { applyInputToTrial, createOpenTrial, missTrial, type OpenTrial } from "@/core/training/session";
 import { computerKeyboardGuide, useComputerKeyboard } from "@/hooks/useComputerKeyboard";
@@ -37,6 +42,11 @@ import type {
 
 type Phase = "configure" | "running" | "paused" | "complete";
 type SaveStatus = "saving" | "pending" | "synced";
+interface PendingPerformanceTrial {
+  noteIndex: number;
+  open: OpenTrial;
+  hit: TrainingTrial | null;
+}
 
 // How far past the current note the stream stays generated, so the reader always
 // has something to look ahead to.
@@ -119,6 +129,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const beatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The trial the player closed by hitting the note, held until the beat ends.
   const hitRef = useRef<TrainingTrial | null>(null);
+  const pendingPerformanceTrialRef = useRef<PendingPerformanceTrial | null>(null);
   const startedAtRef = useRef("");
   const armedRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -181,6 +192,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     setPhase("complete");
     setFocusMode(false);
     armedRef.current = false;
+    pendingPerformanceTrialRef.current = null;
     engine.current?.stopAll();
     const nextSummary = summarizeTraining(completedTrials);
     setSummary(nextSummary);
@@ -254,6 +266,19 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     return next;
   }, [showPerformanceFeedback]);
 
+  function consumePendingPerformanceTrial(beatAtMs: number): boolean {
+    const pending = pendingPerformanceTrialRef.current;
+    if (!pending || pending.noteIndex !== streamIndexRef.current) return false;
+    openTrialRef.current = pending.open;
+    hitRef.current = pending.hit;
+    armedRef.current = pending.hit === null;
+    setBeatStartedAtMs(beatAtMs);
+    setFeedback(pending.hit ? "correct" : pending.open.attempts.length > 0 ? "incorrect" : null);
+    setAttemptCount(pending.open.attempts.length);
+    pendingPerformanceTrialRef.current = null;
+    return true;
+  }
+
   // A declaration rather than a const: each beat schedules the next one, which
   // means naming itself.
   function beat(): void {
@@ -268,7 +293,9 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       engine.current?.click(countInRef.current === COUNT_IN_BEATS);
       countInRef.current -= 1;
       setCountIn(countInRef.current);
-      if (countInRef.current === 0) armAt(scheduledAt);
+      if (countInRef.current === 0) {
+        if (!consumePendingPerformanceTrial(scheduledAt)) armAt(scheduledAt);
+      }
     } else {
       const completed = closeBeat(scheduledAt);
       const target = configRef.current.sessionLength;
@@ -280,7 +307,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       setStreamIndex(streamIndexRef.current);
       extendStream(streamIndexRef.current);
       engine.current?.click(false);
-      armAt(scheduledAt);
+      if (!consumePendingPerformanceTrial(scheduledAt)) armAt(scheduledAt);
     }
 
     // Scheduled against the beat it should have landed on, not against now, so
@@ -303,13 +330,91 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     }
   }
 
+  function capturePerformanceLookahead(input: NoteInputEvent): boolean {
+    if (!timed || countInRef.current > 0) return false;
+    const beatMs = 60000 / configRef.current.tempoBpm;
+    if (!isPerformanceLookaheadWindow(input.occurredAtMs, beatAtRef.current, beatMs)) return false;
+    const nextIndex = streamIndexRef.current + 1;
+    const crossesSystem = Math.floor(nextIndex / PERFORMANCE_NOTES_PER_LINE)
+      !== Math.floor(streamIndexRef.current / PERFORMANCE_NOTES_PER_LINE);
+    if (crossesSystem) return false;
+    const next = streamRef.current[nextIndex];
+    if (!next) return false;
+    const timingDistanceMs = Math.abs(input.occurredAtMs - beatAtRef.current);
+    const scoringInput = { ...input, occurredAtMs: beatAtRef.current + timingDistanceMs };
+    const pending = pendingPerformanceTrialRef.current?.noteIndex === nextIndex
+      ? pendingPerformanceTrialRef.current
+      : {
+          noteIndex: nextIndex,
+          open: createOpenTrial(next, trialsRef.current.length + 1, beatAtRef.current),
+          hit: null,
+        };
+    if (!pending) return false;
+    if (pending.hit) {
+      const replay = applyInputToTrial({
+        id: pending.hit.id,
+        sequenceIndex: pending.hit.sequenceIndex,
+        target: pending.hit.target,
+        shownAtMs: pending.hit.shownAtMs,
+        attempts: pending.hit.attempts,
+      }, scoringInput);
+      if (replay.attempt.correct) {
+        showPerformanceFeedback(pending.hit.timingGrade ?? "bad", nextIndex);
+      } else {
+        pending.open = replay.trial;
+        pending.hit = { ...pending.hit, attempts: replay.trial.attempts };
+        showPerformanceFeedback("wrong", nextIndex);
+      }
+      pendingPerformanceTrialRef.current = pending;
+      return true;
+    }
+    const result = applyInputToTrial(pending.open, scoringInput);
+    pending.open = result.trial;
+    if (!result.completed) {
+      showPerformanceFeedback("wrong", nextIndex);
+      pendingPerformanceTrialRef.current = pending;
+      return true;
+    }
+    const timingGrade = gradePerformanceTiming(input.occurredAtMs - beatAtRef.current, beatMs);
+    pending.hit = { ...result.completed, timingGrade };
+    pendingPerformanceTrialRef.current = pending;
+    showPerformanceFeedback(timingGrade, nextIndex);
+    return true;
+  }
+
+  function recordInputAfterPerformanceHit(input: NoteInputEvent): void {
+    const hit = hitRef.current;
+    if (!hit) return;
+    const replay = applyInputToTrial({
+      id: hit.id,
+      sequenceIndex: hit.sequenceIndex,
+      target: hit.target,
+      shownAtMs: hit.shownAtMs,
+      attempts: hit.attempts,
+    }, input);
+    if (replay.attempt.correct) {
+      showPerformanceFeedback(hit.timingGrade ?? "bad", streamIndexRef.current);
+      return;
+    }
+    hitRef.current = { ...hit, attempts: replay.trial.attempts };
+    setAttemptCount(replay.trial.attempts.length);
+    setFeedback("incorrect");
+    showPerformanceFeedback("wrong", streamIndexRef.current);
+  }
+
   const handleInput = (input: NoteInputEvent) => {
     const currentConfig = configRef.current;
     if (currentConfig.soundEnabled && (input.source !== "midi" || currentConfig.midiSoundEnabled)) {
       engine.current?.noteOn(input.midi, input.velocity ?? 96);
     }
     synchronizePerformanceClock(input.occurredAtMs);
-    if (phaseRef.current !== "running" || !armedRef.current || !openTrialRef.current) return;
+    if (phaseRef.current !== "running") return;
+    if (capturePerformanceLookahead(input)) return;
+    if (timed && !armedRef.current && hitRef.current) {
+      recordInputAfterPerformanceHit(input);
+      return;
+    }
+    if (!armedRef.current || !openTrialRef.current) return;
 
     const result = applyInputToTrial(openTrialRef.current, input);
     openTrialRef.current = result.trial;
@@ -385,6 +490,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     setAttemptCount(0);
     openTrialRef.current = null;
     armedRef.current = false;
+    pendingPerformanceTrialRef.current = null;
     streamRef.current = [];
     streamIndexRef.current = 0;
     setStreamIndex(0);
@@ -414,6 +520,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     setPhase("paused");
     armedRef.current = false;
     openTrialRef.current = null;
+    pendingPerformanceTrialRef.current = null;
     if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
     beatTimerRef.current = null;
     engine.current?.stopAll();
@@ -427,6 +534,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     if (timed) {
       // Counted back in, so the pulse is re-established before the music resumes.
       hitRef.current = null;
+      pendingPerformanceTrialRef.current = null;
       countInRef.current = COUNT_IN_BEATS;
       setCountIn(COUNT_IN_BEATS);
       beatAtRef.current = performance.now();
@@ -445,6 +553,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     // handle, otherwise it still sees "running" and schedules the next beat.
     phaseRef.current = "complete";
     armedRef.current = false;
+    pendingPerformanceTrialRef.current = null;
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
     timeoutRef.current = null;
