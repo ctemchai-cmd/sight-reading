@@ -153,7 +153,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const beatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The trial the player closed by hitting the note, held until the beat ends.
   const hitRef = useRef<TrainingTrial | null>(null);
-  // True while a beat is being spent on a page turn rather than on a note.
+  // True while a beat leads in from the clef rather than sitting on a note.
   const pageRestRef = useRef(false);
   const [pageRest, setPageRest] = useState(false);
   const pendingPerformanceTrialRef = useRef<PendingPerformanceTrial | null>(null);
@@ -314,6 +314,15 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     return true;
   }
 
+  function beginPerformanceLeadIn(beatAtMs: number): void {
+    pageRestRef.current = true;
+    setPageRest(true);
+    setBeatStartedAtMs(beatAtMs);
+    openTrialRef.current = null;
+    armedRef.current = false;
+    hitRef.current = null;
+  }
+
   // A declaration rather than a const: each beat schedules the next one, which
   // means naming itself.
   function beat(): void {
@@ -329,11 +338,13 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       countInRef.current -= 1;
       setCountIn(countInRef.current);
       if (countInRef.current === 0) {
-        if (!consumePendingPerformanceTrial(scheduledAt)) armAt(scheduledAt);
+        // The count establishes the pulse; this extra beat lets the cursor
+        // visibly enter from the clef before the first note is due.
+        beginPerformanceLeadIn(scheduledAt);
       }
     } else if (pageRestRef.current) {
-      // The turn's beat. The new line is already on screen and the pulse has
-      // carried on, but nothing was due, so nothing was scored.
+      // The lead-in beat has ended. The line was already visible and the pulse
+      // carried on, but its first note was not due until this deadline.
       pageRestRef.current = false;
       setPageRest(false);
       engine.current?.click(false);
@@ -352,14 +363,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       if (startsPerformanceLine(streamIndexRef.current)) {
         // Spend this beat showing the new line rather than demanding its first
         // note, which would otherwise arrive the instant the page turned.
-        pageRestRef.current = true;
-        setPageRest(true);
-        // The turn's beat still needs a start time, or the cursor has nothing to
-        // sweep across and simply waits at the note it is heading for.
-        setBeatStartedAtMs(scheduledAt);
-        openTrialRef.current = null;
-        armedRef.current = false;
-        hitRef.current = null;
+        beginPerformanceLeadIn(scheduledAt);
       } else if (!consumePendingPerformanceTrial(scheduledAt)) {
         armAt(scheduledAt);
       }
@@ -765,6 +769,19 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       onExit={toggleFocusMode}
       className="note-training-layout mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6 sm:py-6"
     >
+      {countIn > 0 && (
+        <div
+          className="performance-count-in pointer-events-none fixed inset-0 z-[60] grid place-items-center"
+          aria-live="polite"
+        >
+          <span
+            className="grid size-24 place-items-center rounded-full border border-teal-300/50 bg-slate-950/80 text-6xl font-black text-teal-300 shadow-2xl shadow-teal-950/60 backdrop-blur-sm"
+            aria-label={`Starting in ${countIn}`}
+          >
+            {countIn}
+          </span>
+        </div>
+      )}
       {!focusMode && (
       <div className="note-training-toolbar flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
@@ -788,18 +805,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       </div>
       )}
 
-      <Card className="note-training-staff relative p-3 sm:p-5">
-        {countIn > 0 && (
-          // A count-in is time to read the first note, so it must not cover it:
-          // this used to be a full-card overlay, which meant the music appeared
-          // at the exact moment it had to be played.
-          <p
-            className="pointer-events-none absolute bottom-2 left-3 z-30 grid size-11 place-items-center rounded-full bg-slate-950/70 text-xl font-bold text-teal-300"
-            aria-label={`Starting in ${countIn}`}
-          >
-            {countIn}
-          </p>
-        )}
+      <Card className={`note-training-staff relative ${timed ? "performance-training-staff p-2" : "p-3 sm:p-5"}`}>
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={resume}><Play className="size-4" /> Resume session</Button></div>}
         {visibleNotes.length > 0 && (
           <MusicStaff
@@ -811,7 +817,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
             feedback={feedback}
             beatCursor={timed}
             beatCursorRunning={timed && phase === "running" && countIn === 0}
-            beatCursorLeadIn={pageRest}
+            beatCursorLeadIn={pageRest || countIn > 0}
             beatDurationMs={timed ? 60000 / config.tempoBpm : undefined}
             beatStartedAtMs={timed ? beatStartedAtMs : undefined}
             performanceFeedbacks={timed ? visiblePerformanceFeedbacks : undefined}
@@ -827,7 +833,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
         </div>
       </Card>
 
-      <div className="note-training-inputs">
+      <div className={`note-training-inputs ${timed ? "performance-training-inputs" : ""}`}>
         <PianoKeyboard
           trainingMinMidi={config.minMidi}
           trainingMaxMidi={config.maxMidi}

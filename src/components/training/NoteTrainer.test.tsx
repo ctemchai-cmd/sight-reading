@@ -116,7 +116,7 @@ describe("NoteTrainer clock lifecycle", () => {
       fireEvent.click(screen.getByRole("button", { name: /Start training/i }));
       await Promise.resolve();
     });
-    act(() => vi.advanceTimersByTime(3_600));
+    act(() => vi.advanceTimersByTime(4_800));
 
     const nextMidi = trainingHarness.staffProps?.notes[1]?.expectedMidi;
     expect(nextMidi).toBeDefined();
@@ -140,7 +140,7 @@ describe("NoteTrainer clock lifecycle", () => {
       fireEvent.click(screen.getByRole("button", { name: /Start training/i }));
       await Promise.resolve();
     });
-    act(() => vi.advanceTimersByTime(3_600));
+    act(() => vi.advanceTimersByTime(4_800));
 
     const currentMidi = trainingHarness.staffProps?.notes[0]?.expectedMidi;
     const nextMidi = trainingHarness.staffProps?.notes[1]?.expectedMidi;
@@ -196,7 +196,7 @@ describe("NoteTrainer clock lifecycle", () => {
       fireEvent.click(screen.getByRole("button", { name: /Start training/i }));
       await Promise.resolve();
     });
-    act(() => vi.advanceTimersByTime(4_200));
+    act(() => vi.advanceTimersByTime(5_400));
     const nextMidi = trainingHarness.staffProps?.notes[1]?.expectedMidi;
     expect(nextMidi).toBeDefined();
 
@@ -223,9 +223,9 @@ describe("NoteTrainer clock lifecycle", () => {
       fireEvent.click(screen.getByRole("button", { name: /Start training/i }));
       await Promise.resolve();
     });
-    // Four count-in beats, sixteen played beats, then half of the page-turn
+    // Four count-in beats, an initial run-up, sixteen played beats, then half of the page-turn
     // beat puts the cursor at the scoring boundary before the new line's A.
-    act(() => vi.advanceTimersByTime(23_400));
+    act(() => vi.advanceTimersByTime(24_600));
 
     expect(trainingHarness.staffProps?.currentIndex).toBe(0);
     expect(trainingHarness.staffProps?.beatCursorLeadIn).toBe(true);
@@ -249,5 +249,38 @@ describe("NoteTrainer clock lifecycle", () => {
     act(() => vi.advanceTimersByTime(600));
     expect(trainingHarness.staffProps?.currentIndex).toBe(0);
     expect(trainingHarness.staffProps?.beatCursorLeadIn).toBe(false);
+  });
+
+  it("runs in from the clef before the first Performance note is due", async () => {
+    render(<NoteTrainer mode="performance" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Start training/i }));
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(3_600));
+
+    expect(trainingHarness.staffProps?.currentIndex).toBe(0);
+    expect(trainingHarness.staffProps?.beatCursorLeadIn).toBe(true);
+    const firstMidi = trainingHarness.staffProps?.notes[0]?.expectedMidi;
+    expect(firstMidi).toBeDefined();
+
+    act(() => vi.advanceTimersByTime(600));
+    await act(async () => {
+      trainingHarness.midiNoteOn?.({
+        midi: firstMidi!,
+        velocity: 100,
+        source: "midi",
+        occurredAtMs: performance.now(),
+      });
+    });
+
+    expect(trainingHarness.staffProps?.performanceFeedbacks?.at(-1)).toMatchObject({
+      noteIndex: 0,
+      kind: "bad",
+    });
+    act(() => vi.advanceTimersByTime(600));
+    expect(trainingHarness.staffProps?.beatCursorLeadIn).toBe(false);
+    expect(trainingHarness.staffProps?.currentIndex).toBe(0);
   });
 });

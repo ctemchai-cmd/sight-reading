@@ -224,6 +224,21 @@ html[data-focus-mode="true"] .app-nav {
   max-height: 21rem;
 }
 
+/* Performance has one compact notation row. Let its dark card and white paper
+   hug the SVG, then give every pixel they release to the piano below. */
+.performance-training-staff .music-staff {
+  min-height: 0;
+}
+
+.focus-training-surface .performance-training-staff {
+  flex: 0 0 auto;
+  max-height: none;
+}
+
+.focus-training-surface .performance-training-inputs {
+  max-height: none;
+}
+
 .focus-training-surface .sheet-training-staff {
   flex: 0 1 auto;
   min-height: 0;
