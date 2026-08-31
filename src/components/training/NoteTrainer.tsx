@@ -14,6 +14,7 @@ import { formatClef, resolveRange } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
 import {
   PERFORMANCE_NOTES_PER_LINE,
+  PERFORMANCE_VISIBLE_LINES,
   gradePerformanceTiming,
   isPerformanceLookaheadWindow,
   performancePageLastIndex,
@@ -145,7 +146,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   // every grade/beat render made VexFlow redraw the score and delayed motion.
   const visibleNotes = useMemo(
     () => timed
-      ? stream.slice(performancePageStart, performancePageStart + PERFORMANCE_NOTES_PER_LINE)
+      ? stream.slice(performancePageStart, performancePageStart + PERFORMANCE_NOTES_PER_LINE * PERFORMANCE_VISIBLE_LINES)
       : stream,
     [performancePageStart, stream, timed],
   );
@@ -153,7 +154,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const visiblePerformanceFeedbacks = performanceFeedbacks
     .filter((event) => (
       event.noteIndex >= performancePageStart
-      && event.noteIndex < performancePageStart + PERFORMANCE_NOTES_PER_LINE
+      && event.noteIndex < performancePageStart + PERFORMANCE_NOTES_PER_LINE * PERFORMANCE_VISIBLE_LINES
     ))
     .map((event) => ({ ...event, noteIndex: event.noteIndex - performancePageStart }));
   const latestPerformanceFeedback = performanceFeedbacks[performanceFeedbacks.length - 1] ?? null;

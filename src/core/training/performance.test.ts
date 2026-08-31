@@ -8,16 +8,20 @@ import {
 } from "@/core/training/performance";
 
 describe("performance sheet paging", () => {
-  it("keeps the cursor local to a four-measure line", () => {
-    const notes = Array.from({ length: 32 }, (_, index) => index);
+  it("shows the line being played and the one after it, cursor on the first", () => {
+    const notes = Array.from({ length: 64 }, (_, index) => index);
 
-    expect(getPerformancePage(notes, 15)).toEqual({ notes: notes.slice(0, 16), currentIndex: 15, startIndex: 0 });
-    expect(getPerformancePage(notes, 16)).toEqual({ notes: notes.slice(16, 32), currentIndex: 0, startIndex: 16 });
+    expect(getPerformancePage(notes, 15)).toEqual({ notes: notes.slice(0, 32), currentIndex: 15, startIndex: 0 });
+    // Crossing a line shifts the window on by one, so what was the lower line —
+    // already read — becomes the one being played.
+    expect(getPerformancePage(notes, 16)).toEqual({ notes: notes.slice(16, 48), currentIndex: 0, startIndex: 16 });
   });
 
-  it("does not generate past the final partial line", () => {
+  it("generates far enough ahead to fill the window, and no further", () => {
+    expect(performancePageLastIndex(16, "endless")).toBe(47);
+    expect(performancePageLastIndex(0, "endless")).toBe(31);
+    // A session that ends mid-window stops at its final note.
     expect(performancePageLastIndex(16, 25)).toBe(24);
-    expect(performancePageLastIndex(16, "endless")).toBe(31);
   });
 
   it("grades distance from the beat relative to tempo", () => {
