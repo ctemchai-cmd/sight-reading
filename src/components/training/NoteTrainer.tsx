@@ -389,19 +389,22 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     if (!timed || countInRef.current > 0) return false;
     const beatMs = 60000 / configRef.current.tempoBpm;
     if (!isPerformanceLookaheadWindow(input.occurredAtMs, beatAtRef.current, beatMs)) return false;
-    const nextIndex = streamIndexRef.current + 1;
-    const crossesSystem = Math.floor(nextIndex / PERFORMANCE_NOTES_PER_LINE)
+    // During a page-turn beat streamIndex already points at the first note on
+    // the new line. Its latter half is that note's early window; applying the
+    // ordinary +1 lookahead here incorrectly judged the second note instead.
+    const scoringIndex = streamIndexRef.current + (pageRestRef.current ? 0 : 1);
+    const crossesSystem = Math.floor(scoringIndex / PERFORMANCE_NOTES_PER_LINE)
       !== Math.floor(streamIndexRef.current / PERFORMANCE_NOTES_PER_LINE);
-    if (crossesSystem) return false;
-    const next = streamRef.current[nextIndex];
-    if (!next) return false;
+    if (!pageRestRef.current && crossesSystem) return false;
+    const scoringTarget = streamRef.current[scoringIndex];
+    if (!scoringTarget) return false;
     const timingDistanceMs = Math.abs(input.occurredAtMs - beatAtRef.current);
     const scoringInput = { ...input, occurredAtMs: beatAtRef.current + timingDistanceMs };
-    const pending = pendingPerformanceTrialRef.current?.noteIndex === nextIndex
+    const pending = pendingPerformanceTrialRef.current?.noteIndex === scoringIndex
       ? pendingPerformanceTrialRef.current
       : {
-          noteIndex: nextIndex,
-          open: createOpenTrial(next, trialsRef.current.length + 1, beatAtRef.current),
+          noteIndex: scoringIndex,
+          open: createOpenTrial(scoringTarget, trialsRef.current.length + 1, beatAtRef.current),
           hit: null,
         };
     if (!pending) return false;
@@ -414,11 +417,11 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
         attempts: pending.hit.attempts,
       }, scoringInput);
       if (replay.attempt.correct) {
-        showPerformanceFeedback(pending.hit.timingGrade ?? "bad", nextIndex);
+        showPerformanceFeedback(pending.hit.timingGrade ?? "bad", scoringIndex);
       } else {
         pending.open = replay.trial;
         pending.hit = { ...pending.hit, attempts: replay.trial.attempts };
-        showPerformanceFeedback("wrong", nextIndex);
+        showPerformanceFeedback("wrong", scoringIndex);
       }
       pendingPerformanceTrialRef.current = pending;
       return true;
@@ -426,14 +429,14 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     const result = applyInputToTrial(pending.open, scoringInput);
     pending.open = result.trial;
     if (!result.completed) {
-      showPerformanceFeedback("wrong", nextIndex);
+      showPerformanceFeedback("wrong", scoringIndex);
       pendingPerformanceTrialRef.current = pending;
       return true;
     }
     const timingGrade = gradePerformanceTiming(input.occurredAtMs - beatAtRef.current, beatMs);
     pending.hit = { ...result.completed, timingGrade };
     pendingPerformanceTrialRef.current = pending;
-    showPerformanceFeedback(timingGrade, nextIndex);
+    showPerformanceFeedback(timingGrade, scoringIndex);
     return true;
   }
 

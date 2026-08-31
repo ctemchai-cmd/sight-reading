@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 interface StaffHarnessProps {
   notes: Array<{ expectedMidi: number }>;
   currentIndex: number;
+  beatCursorLeadIn?: boolean;
   performanceFeedbacks?: Array<{ noteIndex: number; kind: string }>;
 }
 
@@ -213,5 +214,40 @@ describe("NoteTrainer clock lifecycle", () => {
       expect.objectContaining({ noteIndex: 1, kind: "bad" }),
       expect.objectContaining({ noteIndex: 0, kind: "miss" }),
     ]));
+  });
+
+  it("scores the first note during the latter half of a page-turn lead-in", async () => {
+    render(<NoteTrainer mode="performance" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Start training/i }));
+      await Promise.resolve();
+    });
+    // Four count-in beats, sixteen played beats, then half of the page-turn
+    // beat puts the cursor at the scoring boundary before the new line's A.
+    act(() => vi.advanceTimersByTime(23_400));
+
+    expect(trainingHarness.staffProps?.currentIndex).toBe(0);
+    expect(trainingHarness.staffProps?.beatCursorLeadIn).toBe(true);
+    const firstMidi = trainingHarness.staffProps?.notes[0]?.expectedMidi;
+    expect(firstMidi).toBeDefined();
+
+    await act(async () => {
+      trainingHarness.midiNoteOn?.({
+        midi: firstMidi!,
+        velocity: 100,
+        source: "midi",
+        occurredAtMs: performance.now(),
+      });
+    });
+
+    expect(trainingHarness.staffProps?.performanceFeedbacks?.at(-1)).toMatchObject({
+      noteIndex: 0,
+      kind: "bad",
+    });
+
+    act(() => vi.advanceTimersByTime(600));
+    expect(trainingHarness.staffProps?.currentIndex).toBe(0);
+    expect(trainingHarness.staffProps?.beatCursorLeadIn).toBe(false);
   });
 });
