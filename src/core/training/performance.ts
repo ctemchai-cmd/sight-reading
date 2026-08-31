@@ -3,6 +3,15 @@ import type { PerformanceTimingGrade } from "@/types/training";
 export const PERFORMANCE_NOTES_PER_LINE = 16;
 export const PERFORMANCE_TIMING_GRADE_ORDER = ["perfect", "great", "cool", "bad", "miss"] as const;
 
+export function performanceBeatProgress(
+  nowMs: number,
+  beatStartedAtMs: number,
+  beatDurationMs: number,
+): number {
+  if (beatStartedAtMs <= 0 || beatDurationMs <= 0) return 0;
+  return Math.min(1, Math.max(0, (nowMs - beatStartedAtMs) / beatDurationMs));
+}
+
 /**
  * Timing windows scale with tempo. At 60 BPM they are 120/250/500 ms; the
  * remaining part of the beat is Bad, and an unanswered beat is Miss.

@@ -4,6 +4,13 @@ export type InputSource = "touch" | "computer-keyboard" | "midi";
 export type TrainingMode = "reflex" | "flash" | "performance" | "sheet";
 export type SessionEndReason = "target-reached" | "user-stopped";
 export type PerformanceTimingGrade = "perfect" | "great" | "cool" | "bad" | "miss";
+export type PerformanceFeedbackKind = PerformanceTimingGrade | "wrong";
+
+export interface PerformanceFeedbackEvent {
+  id: number;
+  noteIndex: number;
+  kind: PerformanceFeedbackKind;
+}
 /** How far the line is allowed to move between notes, in scale degrees. */
 export type MelodicShape = "steps" | "thirds" | "leaps" | "random";
 

@@ -12,12 +12,15 @@ import {
 } from "vexflow";
 import { isAccidentalImplied } from "@/core/music/keys";
 import { accidentalToVexFlow, formatClef, notationToVexFlowKey } from "@/core/music/notes";
+import { performanceBeatProgress } from "@/core/training/performance";
 import type { Clef, KeyName, TargetNote } from "@/types/music";
+import type { PerformanceFeedbackEvent, PerformanceFeedbackKind } from "@/types/training";
 
 // The notation surface remains paper-white in every app theme, so musical ink stays dark.
 const INK = "#0f172a";
 const CORRECT = "#2dd4bf";
 const INCORRECT = "#fb7185";
+const PERFORMANCE_CORRECT = "#38bdf8";
 const SHEET_PLAYED = "#64748b";
 const STREAM_PLAYED = "#94a3b8";
 const SLIDE_MS = 300;
@@ -39,6 +42,14 @@ const MAX_FILL_SCALE = 2.2;
  */
 const SHEET_MIN_MEASURE_PX = 150;
 const MAX_SHEET_SCALE = 2;
+const PERFORMANCE_FEEDBACK_LABELS: Record<PerformanceFeedbackKind, string> = {
+  perfect: "Perfect",
+  great: "Great",
+  cool: "Cool",
+  bad: "Bad",
+  miss: "Miss",
+  wrong: "Wrong",
+};
 
 interface MusicStaffProps {
   notes: TargetNote[];
@@ -52,6 +63,7 @@ interface MusicStaffProps {
   beatCursorRunning?: boolean;
   beatDurationMs?: number;
   beatStartedAtMs?: number;
+  performanceFeedback?: PerformanceFeedbackEvent | null;
   onReady?: () => void;
   /** Stream only: take the container's height and scale the notation to match. */
   fill?: boolean;
@@ -107,6 +119,18 @@ function createVexNote(target: TargetNote, color: string, keySignature: KeyName,
   return note;
 }
 
+function paintVexElement(element: SVGElement, color: string): void {
+  const nodes = [element, ...Array.from(element.querySelectorAll<SVGElement>("*"))];
+  for (const node of nodes) {
+    node.style.setProperty("fill", color, "important");
+    node.style.setProperty("stroke", color, "important");
+  }
+}
+
+function interpolate(from: number, to: number, progress: number): number {
+  return from + (to - from) * progress;
+}
+
 export function MusicStaff({
   notes,
   currentIndex = 0,
@@ -118,6 +142,7 @@ export function MusicStaff({
   beatCursorRunning = false,
   beatDurationMs = 0,
   beatStartedAtMs = 0,
+  performanceFeedback = null,
   onReady,
   fill = false,
   className,
@@ -127,6 +152,8 @@ export function MusicStaff({
   const streamLayerRef = useRef<HTMLDivElement>(null);
   const sheetLayerRef = useRef<HTMLDivElement>(null);
   const sheetCursorRef = useRef<HTMLDivElement>(null);
+  const sheetNoteElementsRef = useRef<Array<SVGElement | null>>([]);
+  const paintedPerformanceNoteRef = useRef<number | null>(null);
   const readyRef = useRef(onReady);
   const drawnIndexRef = useRef(-1);
   const slideRef = useRef<Animation | null>(null);
@@ -292,6 +319,7 @@ export function MusicStaff({
     });
     const prefixes = staves.map((stave) => stave.getNoteStartX() - stave.getX());
     const cursorPositions: CursorGeometry[] = [];
+    const noteElements: Array<SVGElement | null> = [];
 
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
       const firstInRow = rowIndex * measuresPerRow;
@@ -329,6 +357,9 @@ export function MusicStaff({
           for (let localIndex = 0; localIndex < vexNotes.length; localIndex += 1) {
             const index = start + localIndex;
             const note = vexNotes[localIndex];
+            const element = note.getSVGElement() ?? null;
+            element?.setAttribute("data-performance-note-index", String(index));
+            noteElements[index] = element;
             const cursorWidth = Math.min(42, Math.max(24, noteSpace * 0.18));
             const top = stave.getYForLine(0) - 16;
             cursorPositions[index] = {
@@ -343,6 +374,8 @@ export function MusicStaff({
       }
     }
 
+    sheetNoteElementsRef.current = noteElements;
+    paintedPerformanceNoteRef.current = null;
     setSheetCursorPositions(cursorPositions);
 
     // Several systems will not fit at once, so keep Sheet Reading's current
@@ -363,27 +396,52 @@ export function MusicStaff({
 
   const sheetCursor = sheetCursorPositions[currentIndex] ?? null;
   const nextSheetCursor = sheetCursorPositions[currentIndex + 1] ?? null;
+  const performanceFeedbackGeometry = performanceFeedback
+    ? sheetCursorPositions[performanceFeedback.noteIndex] ?? null
+    : null;
+
+  useEffect(() => {
+    if (!beatCursor) return;
+    const previousIndex = paintedPerformanceNoteRef.current;
+    if (previousIndex !== null) {
+      const previous = sheetNoteElementsRef.current[previousIndex];
+      if (previous) paintVexElement(previous, INK);
+    }
+    if (!performanceFeedback) {
+      paintedPerformanceNoteRef.current = null;
+      return;
+    }
+    const element = sheetNoteElementsRef.current[performanceFeedback.noteIndex];
+    if (!element) return;
+    const correct = performanceFeedback.kind !== "wrong" && performanceFeedback.kind !== "miss";
+    paintVexElement(element, correct ? PERFORMANCE_CORRECT : INCORRECT);
+    paintedPerformanceNoteRef.current = performanceFeedback.noteIndex;
+  }, [beatCursor, performanceFeedback, sheetCursorPositions]);
 
   useEffect(() => {
     const cursor = sheetCursorRef.current;
-    if (!cursor || !sheetCursor || !nextSheetCursor || !beatCursorRunning || beatDurationMs <= 0) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const elapsedMs = beatStartedAtMs > 0 ? Math.max(0, performance.now() - beatStartedAtMs) : 0;
-    const animation = cursor.animate(
-      [
-        { transform: "translate(0px, 0px)" },
-        {
-          transform: `translate(${nextSheetCursor.left - sheetCursor.left}px, ${nextSheetCursor.top - sheetCursor.top}px)`,
-        },
-      ],
-      {
-        duration: beatDurationMs,
-        delay: -Math.min(elapsedMs, beatDurationMs),
-        easing: "linear",
-        fill: "forwards",
-      },
-    );
-    return () => animation.cancel();
+    if (!cursor || !sheetCursor) return;
+    let frame = 0;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const draw = (now: number) => {
+      const canMove = beatCursorRunning
+        && !reducedMotion
+        && Boolean(nextSheetCursor)
+        && beatDurationMs > 0
+        && beatStartedAtMs > 0;
+      const progress = canMove
+        ? performanceBeatProgress(now, beatStartedAtMs, beatDurationMs)
+        : 0;
+      const next = nextSheetCursor ?? sheetCursor;
+      const left = interpolate(sheetCursor.left, next.left, progress);
+      const top = interpolate(sheetCursor.top, next.top, progress);
+      cursor.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+      cursor.style.width = `${interpolate(sheetCursor.width, next.width, progress)}px`;
+      cursor.style.height = `${interpolate(sheetCursor.height, next.height, progress)}px`;
+      if (canMove && progress < 1) frame = requestAnimationFrame(draw);
+    };
+    draw(performance.now());
+    return () => cancelAnimationFrame(frame);
   }, [beatCursorRunning, beatDurationMs, beatStartedAtMs, nextSheetCursor, sheetCursor]);
 
   useEffect(() => {
@@ -433,8 +491,8 @@ export function MusicStaff({
               ref={sheetCursorRef}
               className="sheet-beat-cursor"
               style={{
-                left: sheetCursor.left,
-                top: sheetCursor.top,
+                left: 0,
+                top: 0,
                 width: sheetCursor.width,
                 height: sheetCursor.height,
               }}
@@ -442,6 +500,19 @@ export function MusicStaff({
             />
           )}
           <div ref={sheetLayerRef} className="relative z-10" />
+          {performanceFeedback && performanceFeedbackGeometry && (
+            <span
+              key={performanceFeedback.id}
+              className={`performance-hit-grade performance-hit-grade-${performanceFeedback.kind}`}
+              style={{
+                left: performanceFeedbackGeometry.left + performanceFeedbackGeometry.width / 2,
+                top: performanceFeedbackGeometry.top + performanceFeedbackGeometry.height * 0.35,
+              }}
+              aria-hidden="true"
+            >
+              {PERFORMANCE_FEEDBACK_LABELS[performanceFeedback.kind]}
+            </span>
+          )}
         </div>
       )}
     </div>

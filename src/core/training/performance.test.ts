@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getPerformancePage, gradePerformanceTiming, performancePageLastIndex } from "@/core/training/performance";
+import {
+  getPerformancePage,
+  gradePerformanceTiming,
+  performanceBeatProgress,
+  performancePageLastIndex,
+} from "@/core/training/performance";
 
 describe("performance sheet paging", () => {
   it("keeps the cursor local to a four-measure line", () => {
@@ -20,5 +25,11 @@ describe("performance sheet paging", () => {
     expect(gradePerformanceTiming(500, 1_000)).toBe("cool");
     expect(gradePerformanceTiming(800, 1_000)).toBe("bad");
     expect(gradePerformanceTiming(null, 1_000)).toBe("miss");
+  });
+
+  it("derives cursor progress from the metronome clock and clamps late frames", () => {
+    expect(performanceBeatProgress(1_250, 1_000, 1_000)).toBe(0.25);
+    expect(performanceBeatProgress(900, 1_000, 1_000)).toBe(0);
+    expect(performanceBeatProgress(2_500, 1_000, 1_000)).toBe(1);
   });
 });
