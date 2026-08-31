@@ -368,6 +368,18 @@ export function MusicStaff({
               width: cursorWidth * scale,
               height: (stave.getYForLine(4) - top + 16) * scale,
             };
+            // The final note needs somewhere to travel during its own beat.
+            // Without this off-score destination the cursor reached the last
+            // head one beat early and appeared to wait there before page turn.
+            if (index === notes.length - 1) {
+              cursorPositions[notes.length] = {
+                ...cursorPositions[index],
+                left: Math.max(
+                  cursorPositions[index].left + cursorWidth * 0.6 * scale,
+                  (stave.getX() + stave.getWidth() - cursorWidth - 8) * scale,
+                ),
+              };
+            }
           }
         }
         x += prefixes[measureIndex] + noteSpace;

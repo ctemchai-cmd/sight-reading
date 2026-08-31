@@ -258,16 +258,19 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   // means naming itself.
   function beat(): void {
     if (phaseRef.current !== "running") return;
-    const now = performance.now();
+    // The timeout may wake up late. Musical time still belongs to the deadline
+    // it was scheduled for; using callback time here shortened this beat while
+    // the next timeout continued to target the original grid.
+    const scheduledAt = beatAtRef.current;
     const beatMs = 60000 / configRef.current.tempoBpm;
 
     if (countInRef.current > 0) {
       engine.current?.click(countInRef.current === COUNT_IN_BEATS);
       countInRef.current -= 1;
       setCountIn(countInRef.current);
-      if (countInRef.current === 0) armAt(now);
+      if (countInRef.current === 0) armAt(scheduledAt);
     } else {
-      const completed = closeBeat(now);
+      const completed = closeBeat(scheduledAt);
       const target = configRef.current.sessionLength;
       if (target !== "endless" && completed.length >= target) {
         void finishSession(completed, "target-reached");
@@ -277,7 +280,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       setStreamIndex(streamIndexRef.current);
       extendStream(streamIndexRef.current);
       engine.current?.click(false);
-      armAt(now);
+      armAt(scheduledAt);
     }
 
     // Scheduled against the beat it should have landed on, not against now, so

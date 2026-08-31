@@ -81,5 +81,36 @@ describe("MusicStaff Performance cursor", () => {
     );
     expect(await waitFor(() => container.querySelector(".performance-hit-grade-wrong"))).toHaveTextContent("Wrong");
     await waitFor(() => expect(note?.style.fill).toBe("#fb7185"));
+
+    rerender(
+      <MusicStaff
+        notes={notes}
+        currentIndex={3}
+        mode="sheet"
+        beatCursor
+        beatCursorRunning={false}
+        beatDurationMs={1_000}
+        beatStartedAtMs={performance.now()}
+      />,
+    );
+    const restingAtLastNote = await waitFor(() => {
+      const transform = container.querySelector<HTMLElement>(".sheet-beat-cursor")?.style.transform ?? "";
+      expect(transform).toContain("translate3d");
+      return transform;
+    });
+    rerender(
+      <MusicStaff
+        notes={notes}
+        currentIndex={3}
+        mode="sheet"
+        beatCursor
+        beatCursorRunning
+        beatDurationMs={1_000}
+        beatStartedAtMs={performance.now() - 500}
+      />,
+    );
+    await waitFor(() => {
+      expect(container.querySelector<HTMLElement>(".sheet-beat-cursor")?.style.transform).not.toBe(restingAtLastNote);
+    });
   });
 });
