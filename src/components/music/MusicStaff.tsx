@@ -49,6 +49,8 @@ interface MusicStaffProps {
   feedback?: "correct" | "incorrect" | null;
   /** Sheet only: mark the note whose beat is active without moving the notation. */
   beatCursor?: boolean;
+  beatCursorRunning?: boolean;
+  beatDurationMs?: number;
   onReady?: () => void;
   /** Stream only: take the container's height and scale the notation to match. */
   fill?: boolean;
@@ -62,11 +64,17 @@ interface StreamGeometry {
   spacing: number;
 }
 
-interface SheetCursorGeometry {
+interface CursorGeometry {
   left: number;
   top: number;
   width: number;
   height: number;
+}
+
+interface SheetCursorPath {
+  index: number;
+  current: CursorGeometry;
+  next: CursorGeometry | null;
 }
 
 /**
@@ -112,6 +120,8 @@ export function MusicStaff({
   clef = "treble",
   feedback,
   beatCursor = false,
+  beatCursorRunning = false,
+  beatDurationMs = 0,
   onReady,
   fill = false,
   className,
@@ -131,7 +141,7 @@ export function MusicStaff({
   const [headCenterX, setHeadCenterX] = useState<number | null>(null);
   // Where notes may start: past the clef and whatever the key signature draws.
   const [noteStartX, setNoteStartX] = useState(0);
-  const [sheetCursor, setSheetCursor] = useState<SheetCursorGeometry | null>(null);
+  const [sheetCursor, setSheetCursor] = useState<SheetCursorPath | null>(null);
 
   const streaming = mode === "stream" || mode === "flash";
   const geometry = useMemo(() => streamGeometry(width, mode === "flash", noteStartX), [mode, noteStartX, width]);
@@ -282,7 +292,8 @@ export function MusicStaff({
       return stave.setContext(context);
     });
     const prefixes = staves.map((stave) => stave.getNoteStartX() - stave.getX());
-    let nextCursor: SheetCursorGeometry | null = null;
+    let currentCursor: CursorGeometry | null = null;
+    let followingCursor: CursorGeometry | null = null;
 
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
       const firstInRow = rowIndex * measuresPerRow;
@@ -316,22 +327,27 @@ export function MusicStaff({
         const voice = new Voice({ numBeats: targets.length, beatValue: 4 }).addTickables(vexNotes);
         new Formatter().joinVoices([voice]).format([voice], Math.max(60, noteSpace - 14));
         voice.draw(context, stave);
-        if (beatCursor && currentIndex >= start && currentIndex < start + targets.length) {
-          const currentNote = vexNotes[currentIndex - start];
-          const cursorWidth = Math.min(42, Math.max(24, noteSpace * 0.18));
-          const top = stave.getYForLine(0) - 16;
-          nextCursor = {
-            left: (currentNote.getAbsoluteX() + currentNote.getGlyphWidth() / 2 - cursorWidth / 2) * scale,
-            top: top * scale,
-            width: cursorWidth * scale,
-            height: (stave.getYForLine(4) - top + 16) * scale,
-          };
+        if (beatCursor) {
+          for (const index of [currentIndex, currentIndex + 1]) {
+            if (index < start || index >= start + targets.length) continue;
+            const note = vexNotes[index - start];
+            const cursorWidth = Math.min(42, Math.max(24, noteSpace * 0.18));
+            const top = stave.getYForLine(0) - 16;
+            const geometry = {
+              left: (note.getAbsoluteX() + note.getGlyphWidth() / 2 - cursorWidth / 2) * scale,
+              top: top * scale,
+              width: cursorWidth * scale,
+              height: (stave.getYForLine(4) - top + 16) * scale,
+            };
+            if (index === currentIndex) currentCursor = geometry;
+            else followingCursor = geometry;
+          }
         }
         x += prefixes[measureIndex] + noteSpace;
       }
     }
 
-    setSheetCursor(nextCursor);
+    setSheetCursor(currentCursor ? { index: currentIndex, current: currentCursor, next: followingCursor } : null);
 
     // Several systems will not fit at once, so keep the cursor's line in view.
     const view = containerRef.current;
@@ -380,15 +396,19 @@ export function MusicStaff({
         </>
       ) : (
         <div className="relative">
-          {beatCursor && sheetCursor && (
+          {beatCursor && sheetCursor?.index === currentIndex && (
             <div
-              className="sheet-beat-cursor"
+              key={`${currentIndex}-${Math.round(sheetCursor.current.left)}-${beatCursorRunning}`}
+              className={`sheet-beat-cursor ${beatCursorRunning && sheetCursor.next ? "sheet-beat-cursor-moving" : ""}`}
               style={{
-                left: sheetCursor.left,
-                top: sheetCursor.top,
-                width: sheetCursor.width,
-                height: sheetCursor.height,
-              }}
+                left: sheetCursor.current.left,
+                top: sheetCursor.current.top,
+                width: sheetCursor.current.width,
+                height: sheetCursor.current.height,
+                animationDuration: `${beatDurationMs}ms`,
+                "--cursor-travel-x": `${(sheetCursor.next?.left ?? sheetCursor.current.left) - sheetCursor.current.left}px`,
+                "--cursor-travel-y": `${(sheetCursor.next?.top ?? sheetCursor.current.top) - sheetCursor.current.top}px`,
+              } as CSSProperties}
               aria-hidden="true"
             />
           )}

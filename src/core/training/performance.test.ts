@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPerformancePage, performancePageLastIndex } from "@/core/training/performance";
+import { getPerformancePage, gradePerformanceTiming, performancePageLastIndex } from "@/core/training/performance";
 
 describe("performance sheet paging", () => {
   it("keeps the cursor local to a four-measure line", () => {
@@ -12,5 +12,13 @@ describe("performance sheet paging", () => {
   it("does not generate past the final partial line", () => {
     expect(performancePageLastIndex(16, 25)).toBe(24);
     expect(performancePageLastIndex(16, "endless")).toBe(31);
+  });
+
+  it("grades distance from the beat relative to tempo", () => {
+    expect(gradePerformanceTiming(120, 1_000)).toBe("perfect");
+    expect(gradePerformanceTiming(250, 1_000)).toBe("great");
+    expect(gradePerformanceTiming(500, 1_000)).toBe("cool");
+    expect(gradePerformanceTiming(800, 1_000)).toBe("bad");
+    expect(gradePerformanceTiming(null, 1_000)).toBe("miss");
   });
 });

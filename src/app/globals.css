@@ -106,6 +106,24 @@ textarea,
   pointer-events: none;
 }
 
+.sheet-beat-cursor-moving {
+  animation-name: sheet-beat-cursor-travel;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes sheet-beat-cursor-travel {
+  to {
+    transform: translate(var(--cursor-travel-x), var(--cursor-travel-y));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-beat-cursor-moving {
+    animation: none;
+  }
+}
+
 /* Focus mode gives the whole viewport to the staff and keyboard. The MIDI menu
    goes with the header, but the connection is held by the provider and survives;
    Exit Focus in the training toolbar brings the menu back. */

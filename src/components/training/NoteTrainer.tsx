@@ -12,7 +12,7 @@ import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/k
 import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
 import { formatClef, resolveRange } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
-import { getPerformancePage, performancePageLastIndex } from "@/core/training/performance";
+import { getPerformancePage, gradePerformanceTiming, performancePageLastIndex } from "@/core/training/performance";
 import { calculateWeakNoteStats, mergeNoteStats, summarizeTraining } from "@/core/training/scoring";
 import { applyInputToTrial, createOpenTrial, missTrial, type OpenTrial } from "@/core/training/session";
 import { computerKeyboardGuide, useComputerKeyboard } from "@/hooks/useComputerKeyboard";
@@ -31,6 +31,7 @@ import type {
   TrainingSummary,
   TrainingTrial,
   WeakNoteStat,
+  PerformanceTimingGrade,
 } from "@/types/training";
 
 type Phase = "configure" | "running" | "paused" | "complete";
@@ -42,6 +43,20 @@ const STREAM_LOOKAHEAD = 8;
 /** Beats of metronome before the first note, so the pulse is established first. */
 const COUNT_IN_BEATS = 4;
 const TEMPO_CHOICES = [40, 50, 60, 72, 84, 100, 120];
+const TIMING_GRADE_LABELS: Record<PerformanceTimingGrade, string> = {
+  perfect: "Perfect",
+  great: "Great",
+  cool: "Cool",
+  bad: "Bad",
+  miss: "Miss",
+};
+const TIMING_GRADE_COLORS: Record<PerformanceTimingGrade, string> = {
+  perfect: "text-cyan-300",
+  great: "text-teal-300",
+  cool: "text-sky-300",
+  bad: "text-amber-300",
+  miss: "text-rose-300",
+};
 
 const RANGE_LABELS: Record<RangePreset, string> = {
   staff: "Staff only",
@@ -94,6 +109,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const openTrialRef = useRef<OpenTrial | null>(null);
   const generatorRef = useRef<NoteGenerator | null>(null);
   const [feedback, setFeedback] = useState<"correct" | "incorrect" | null>(null);
+  const [timingGrade, setTimingGrade] = useState<PerformanceTimingGrade | null>(null);
   const [summary, setSummary] = useState<TrainingSummary | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saving");
   const [attemptCount, setAttemptCount] = useState(0);
@@ -211,8 +227,9 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   /** Closes the beat with whatever the player managed, played or not. */
   const closeBeat = useCallback((atMs: number): TrainingTrial[] => {
     const open = openTrialRef.current;
-    const closed = hitRef.current ?? (open ? missTrial(open, atMs) : null);
+    const closed = hitRef.current ?? (open ? { ...missTrial(open, atMs), timingGrade: "miss" as const } : null);
     if (!closed) return trialsRef.current;
+    setTimingGrade(closed.timingGrade ?? null);
     const next = [...trialsRef.current, closed];
     trialsRef.current = next;
     setTrials(next);
@@ -254,7 +271,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const handleInput = (input: NoteInputEvent) => {
     const currentConfig = configRef.current;
     if (currentConfig.soundEnabled && (input.source !== "midi" || currentConfig.midiSoundEnabled)) {
-      engine.current?.playNote(input.midi, input.velocity ?? 96);
+      engine.current?.noteOn(input.midi, input.velocity ?? 96);
     }
     if (phaseRef.current !== "running" || !armedRef.current || !openTrialRef.current) return;
 
@@ -266,14 +283,24 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       return;
     }
 
+    const completed = timed
+      ? {
+          ...result.completed,
+          timingGrade: gradePerformanceTiming(
+            result.completed.correctResponseMs,
+            60000 / currentConfig.tempoBpm,
+          ),
+        }
+      : result.completed;
     armedRef.current = false;
     setFeedback("correct");
     if (timed) {
       // Played in time. The beat will close the trial and move on regardless.
-      hitRef.current = result.completed;
+      hitRef.current = completed;
+      setTimingGrade(completed.timingGrade ?? null);
       return;
     }
-    const completedTrials = [...trialsRef.current, result.completed];
+    const completedTrials = [...trialsRef.current, completed];
     trialsRef.current = completedTrials;
     setTrials(completedTrials);
     const targetCount = currentConfig.sessionLength;
@@ -316,6 +343,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     setTrials([]);
     setSummary(null);
     setFeedback(null);
+    setTimingGrade(null);
     setAttemptCount(0);
     openTrialRef.current = null;
     armedRef.current = false;
@@ -561,13 +589,18 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
             clef={config.clef}
             feedback={feedback}
             beatCursor={timed}
+            beatCursorRunning={timed && phase === "running" && countIn === 0}
+            beatDurationMs={timed ? 60000 / config.tempoBpm : undefined}
             fill={focusMode}
             onReady={markTargetReady}
           />
         )}
         <div className="training-feedback mt-3 h-6 text-center text-sm font-semibold" aria-live="polite">
-          {feedback === "correct" && <span className="text-teal-300">✓ Correct</span>}
-          {feedback === "incorrect" && <span className="text-rose-300">✕ Try again</span>}
+          {feedback === "incorrect" && <span className="text-rose-300">✕ Wrong note</span>}
+          {feedback !== "incorrect" && timed && timingGrade && (
+            <span className={TIMING_GRADE_COLORS[timingGrade]}>{TIMING_GRADE_LABELS[timingGrade]}</span>
+          )}
+          {feedback === "correct" && !timed && <span className="text-teal-300">✓ Correct</span>}
         </div>
       </Card>
 

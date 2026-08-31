@@ -1,7 +1,8 @@
 import { RotateCcw, Target, TrendingUp } from "lucide-react";
 import { formatNoteName, midiToNotatedPitch } from "@/core/music/notes";
 import { formatMilliseconds } from "@/lib/utils";
-import type { TrainingSummary } from "@/types/training";
+import { PERFORMANCE_TIMING_GRADE_ORDER } from "@/core/training/performance";
+import type { PerformanceTimingGrade, TrainingSummary } from "@/types/training";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
@@ -11,6 +12,14 @@ interface SessionResultProps {
   onRetry: () => void;
   onPracticeWeak?: () => void;
 }
+
+const TIMING_LABELS: Record<PerformanceTimingGrade, string> = {
+  perfect: "Perfect",
+  great: "Great",
+  cool: "Cool",
+  bad: "Bad",
+  miss: "Miss",
+};
 
 export function SessionResult({ summary, syncStatus, onRetry, onPracticeWeak }: SessionResultProps) {
   const metrics = [
@@ -36,6 +45,19 @@ export function SessionResult({ summary, syncStatus, onRetry, onPracticeWeak }: 
           </Card>
         ))}
       </div>
+      {summary.timingGrades && (
+        <Card className="p-5">
+          <h2 className="font-semibold text-white">Timing grades</h2>
+          <div className="mt-4 grid grid-cols-5 gap-2 text-center">
+            {PERFORMANCE_TIMING_GRADE_ORDER.map((grade) => (
+              <div key={grade} className="rounded-xl bg-slate-950/60 p-2 sm:p-3">
+                <p className="text-xl font-bold text-white sm:text-2xl">{summary.timingGrades?.[grade] ?? 0}</p>
+                <p className="mt-1 text-[10px] text-slate-400 sm:text-xs">{TIMING_LABELS[grade]}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       <Card className="p-5">
         <h2 className="font-semibold text-white">Weakest notes</h2>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

@@ -19,6 +19,7 @@ const SAMPLE_MAX_MIDI = 96;
  */
 const NOTE_SECONDS = 0.6;
 const RELEASE_SECONDS = 0.3;
+const MAX_HELD_NOTE_MS = 5_000;
 
 /** File naming follows the sample set: flats spelled with `b`, as in `Eb4.mp3`. */
 function sampleName(midi: number): string {
@@ -87,6 +88,7 @@ export class ToneAudioEngine implements AudioEngine {
   private instrument: Instrument | null = null;
   private loading: Promise<Instrument> | null = null;
   private metronome: Tone.MembraneSynth | null = null;
+  private heldNoteTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
   /**
    * Fetching and decoding the samples needs no user gesture — only starting the
@@ -123,10 +125,15 @@ export class ToneAudioEngine implements AudioEngine {
   }
 
   noteOn(midi: number, velocity = 96): void {
+    this.noteOff(midi);
     this.instrument?.triggerAttack(ToneAudioEngine.note(midi), undefined, ToneAudioEngine.gain(velocity));
+    this.heldNoteTimers.set(midi, setTimeout(() => this.noteOff(midi), MAX_HELD_NOTE_MS));
   }
 
   noteOff(midi: number): void {
+    const timer = this.heldNoteTimers.get(midi);
+    if (timer) clearTimeout(timer);
+    this.heldNoteTimers.delete(midi);
     this.instrument?.triggerRelease(ToneAudioEngine.note(midi));
   }
 
@@ -150,6 +157,8 @@ export class ToneAudioEngine implements AudioEngine {
   }
 
   stopAll(): void {
+    for (const timer of this.heldNoteTimers.values()) clearTimeout(timer);
+    this.heldNoteTimers.clear();
     this.instrument?.releaseAll();
     this.metronome?.triggerRelease();
   }

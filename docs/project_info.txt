@@ -14,7 +14,8 @@ These decisions override older or broader statements elsewhere in this document 
 * Focus Mode is available in every training mode. It hides the application header outright, MIDI menu included, and the training toolbar with it, so only the notation and the virtual piano remain. This reverses the earlier decision to keep a compact header for MIDI access: the connection is owned by the layout-level provider and survives, and leaving focus brings the menu, the session counters, and pause back.
 * The only control inside Focus Mode is a small icon-only Exit Focus button overlaying the top-right of the notation, positioned so it costs no layout space. Correct and incorrect verdicts stay legible through note colour, and the verdict text is kept for screen readers only.
 * Reflex notation scales up to fill the height Focus Mode frees, to a ceiling beyond which it reads as stretched against the unchanged horizontal spacing. Leftover height goes to the virtual piano. Sheet Reading keeps its natural notation size for now.
-* Performance mode takes the pacing away from the player. A metronome counts four beats in and then advances a beat cursor across a fixed four-measure/16-quarter-note sheet system whether or not the note was played. The notation does not slide: only the cursor moves on the beat, and completing a system replaces it with the next one. This more closely resembles reading a real score while retaining the continuous-reading rule. Not stopping to correct a mistake is the habit it builds, and the habit the other modes necessarily build against.
+* Performance mode takes the pacing away from the player. A metronome counts four beats in and then advances a beat cursor across a fixed four-measure/16-quarter-note sheet system whether or not the note was played. The notation does not slide: from one beat to the next the cursor travels linearly from the current note toward the following note, arriving exactly when that note becomes armed. Completing a system jumps the cursor to the first note of the next one. This more closely resembles reading a real score while retaining the continuous-reading rule. Not stopping to correct a mistake is the habit it builds, and the habit the other modes necessarily build against.
+* Performance grades correct timing by absolute distance from the beat as a proportion of its duration: Perfect through 12%, Great through 25%, Cool through 50%, Bad for the rest of a correctly answered beat, and Miss when no correct note arrives. At 60 BPM those boundaries are 120, 250, and 500 ms. Pitch accuracy remains separate, so an incorrect attempt still counts as a mistake even if the later correct note receives a timing grade.
 * A running training clock is owned by its trainer route. Reset replaces the old clock rather than layering another one over it, and pause, completion, or navigation away marks the session terminal before clearing pending callbacks and silencing both notes and metronome. A callback already queued during unmount must not be able to restart the beat loop from the old page.
 * A note that goes by unplayed is still a trial, with no response time — the field is nullable rather than filled with the length of the beat, which would quietly corrupt every median built on it. Sessions report how many were missed.
 * Playing early is wrong, not merely early: input is scored against the note under the beat at the time it arrives. There is no tolerance window in V1.
@@ -34,7 +35,7 @@ These decisions override older or broader statements elsewhere in this document 
 * Android installs the manifest as a WebAPK, a real package minted at install time. Identity, icon, and orientation are baked into that package and only refresh when Chrome re-mints it, roughly daily; web content still updates on every deploy.
 * Audio is a sampled piano through Tone.Sampler, loading one recording every minor third from `public/audio/piano/` and letting Tone repitch between them; the full chromatic set is stereo and would decode to tens of megabytes on a phone. Samples preload when a trainer mounts, so the audio context start is the only thing a key press waits on.
 * Tone's default 100 ms scheduling lookahead is switched off. Nothing in this application is sequenced — every note is triggered live by a key press — so that budget is only input lag.
-* Recorded notes ring far longer than the practice tempo, so each is cut to a short duration with a quick release rather than being left to pile up.
+* App piano input uses one lifecycle: `noteOn` at press and `noteOff` at release. It no longer schedules a fixed-duration note and then races that schedule against the physical release, which intermittently cut taps short or made repeated samples phase against one another. Re-articulating a held pitch releases its previous voice first, and a five-second safety release prevents a lost pointer/key-up event leaving a note stuck.
 * A percussive filter-enveloped synth voice remains as the fallback when the sample set cannot be loaded, so training is never silent.
 * App sound stays off by default for MIDI input, because a real keyboard already makes its own sound. The tone exists for the virtual piano and the computer keyboard.
 * UI language is English for V1.
@@ -68,7 +69,7 @@ Implemented in the repository:
 * Next.js 16 App Router application with strict TypeScript, Tailwind CSS, 360 px responsive layouts, installable PWA metadata, production security headers, and a Vercel-compatible build.
 * Music domain types that keep written pitch spelling separate from sounding MIDI pitch.
 * Major key signatures from C to six sharps or six flats, key-aware spelling and scale membership, treble and bass ranges, MIDI/note conversion, ledger classification, uniform generation, adaptive weighting, trial/attempt scoring, and first-attempt accuracy.
-* Performance mode with a counted-in metronome, selectable tempo from 40 to 120 BPM, a fixed four-measure sheet whose beat cursor advances in time, and missed notes recorded as trials without a response time.
+* Performance mode with a counted-in metronome, selectable tempo from 40 to 120 BPM, a fixed four-measure sheet whose cursor travels continuously between beat positions, Perfect/Great/Cool/Bad/Miss timing grades, and missed notes recorded as trials without a response time.
 * Reflex Trainer as a right-to-left note stream with a fixed playhead, generated lookahead, and 25/50/71/100/endless sessions, pause, focus mode, configurable delay, ledger presets, custom MIDI range, virtual piano, computer keyboard input, results, and weak-note replay.
 * Sheet Reading runs two, four, or five lines of four 4/4 measures — sixteen quarter notes each — but shows one line at a time, replacing it with the next once it is read. The notation scales up into whatever height is spare, bounded by the room a measure needs before its notes collide; four measures across a row is the real ceiling on how large it can draw. Compact landscape keeps its tuned size, having no spare height to give. A single system stays legible at full size rather than shrinking five onto a phone. Current-note highlighting, focus mode, and no advance on a wrong input all still apply, and the staff still scrolls when a narrow screen wraps one line onto several rows.
 * Responsive VexFlow 5 SVG notation that reflows sheet measures across rows on narrow screens, a piano-shaped Tone.js synth voice initialized by explicit user action, and a normalized input path.
@@ -517,7 +518,7 @@ Rules:
 * Wrong notes are recorded but do not pause the exercise.
 * A four-beat count-in establishes the pulse.
 * A fixed system shows four 4/4 measures of quarter notes at a time.
-* Notation stays still while a visible cursor advances according to musical time.
+* Notation stays still while a visible cursor travels continuously according to musical time, reaching each note at its beat.
 * Completing a system replaces it with the next one.
 * A note that passes unplayed is recorded without a response time.
 
@@ -533,8 +534,9 @@ Tempo settings:
 120 BPM
 ```
 
-The cursor changes position on the beat without a sliding animation, so its
-visual location and the scoring window remain aligned.
+Within a system the cursor moves linearly between notes for the full beat. At a
+system boundary it jumps back to the first note of the replacement system. The
+animation is disabled when the operating system requests reduced motion.
 
 ---
 

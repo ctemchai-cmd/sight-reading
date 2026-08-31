@@ -5,13 +5,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const audioEngine = {
   click: vi.fn(),
   noteOff: vi.fn(),
+  noteOn: vi.fn(),
   playNote: vi.fn(),
   stopAll: vi.fn(),
 };
 const engineRef = { current: audioEngine };
 
 vi.mock("@/components/music/MusicStaff", () => ({ MusicStaff: () => <div>staff</div> }));
-vi.mock("@/components/music/PianoKeyboard", () => ({ PianoKeyboard: () => <div>piano</div> }));
+vi.mock("@/components/music/PianoKeyboard", () => ({
+  PianoKeyboard: ({ onNoteOn, onNoteOff }: { onNoteOn: (midi: number, velocity: number) => void; onNoteOff: (midi: number) => void }) => (
+    <button type="button" onClick={() => { onNoteOn(60, 100); onNoteOff(60); }}>piano key</button>
+  ),
+}));
 vi.mock("@/components/training/FocusSurface", () => ({
   FocusSurface: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
@@ -54,5 +59,19 @@ describe("NoteTrainer clock lifecycle", () => {
 
     expect(audioEngine.click).toHaveBeenCalledTimes(clickCountAfterNavigation);
     expect(audioEngine.stopAll).toHaveBeenCalled();
+  });
+
+  it("holds app audio from note-on until the input releases it", async () => {
+    render(<NoteTrainer mode="flash" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Start training/i }));
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "piano key" }));
+
+    expect(audioEngine.noteOn).toHaveBeenCalledWith(60, 100);
+    expect(audioEngine.noteOff).toHaveBeenCalledWith(60);
+    expect(audioEngine.playNote).not.toHaveBeenCalled();
   });
 });

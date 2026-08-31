@@ -1,5 +1,6 @@
 import { average, median } from "@/core/training/statistics";
-import type { TrainingSummary, TrainingTrial, WeakNoteStat } from "@/types/training";
+import { PERFORMANCE_TIMING_GRADE_ORDER } from "@/core/training/performance";
+import type { PerformanceTimingGrade, TrainingSummary, TrainingTrial, WeakNoteStat } from "@/types/training";
 
 /** How much of a session a note needs before its own score outranks its history. */
 const SESSION_CONFIDENCE_TRIALS = 3;
@@ -54,6 +55,13 @@ export function summarizeTraining(trials: TrainingTrial[]): TrainingSummary {
     (sum, trial) => sum + trial.attempts.filter((attempt) => !attempt.correct).length,
     0,
   );
+  const timingGrades = Object.fromEntries(
+    PERFORMANCE_TIMING_GRADE_ORDER.map((grade) => [
+      grade,
+      trials.filter((trial) => trial.timingGrade === grade).length,
+    ]),
+  ) as Record<PerformanceTimingGrade, number>;
+  const hasTimingGrades = PERFORMANCE_TIMING_GRADE_ORDER.some((grade) => timingGrades[grade] > 0);
 
   return {
     completedTargets: trials.length,
@@ -64,6 +72,7 @@ export function summarizeTraining(trials: TrainingTrial[]): TrainingSummary {
     averageResponseMs: average(responseTimes),
     medianResponseMs: median(responseTimes),
     bestResponseMs: responseTimes.length === 0 ? null : Math.min(...responseTimes),
+    ...(hasTimingGrades ? { timingGrades } : {}),
     weakNotes: calculateWeakNoteStats(trials),
   };
 }

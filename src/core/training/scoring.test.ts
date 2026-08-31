@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { mergeNoteStats, summarizeTraining, weakNoteStatsFromTotals } from "@/core/training/scoring";
-import type { TrainingTrial } from "@/types/training";
+import type { PerformanceTimingGrade, TrainingTrial } from "@/types/training";
 
-function trial(midi: number, response: number, firstTryCorrect: boolean): TrainingTrial {
+function trial(midi: number, response: number, firstTryCorrect: boolean, timingGrade?: PerformanceTimingGrade): TrainingTrial {
   const id = `trial-${midi}-${response}`;
   const attempts = firstTryCorrect
     ? [{ id: `${id}-1`, trialId: id, targetMidi: midi, playedMidi: midi, correct: true, firstAttempt: true, responseMs: response, velocity: 90, source: "midi" as const }]
@@ -19,6 +19,7 @@ function trial(midi: number, response: number, firstTryCorrect: boolean): Traini
     correctResponseMs: response,
     firstAttemptMs: attempts[0].responseMs,
     firstTryCorrect,
+    timingGrade,
     attempts,
   };
 }
@@ -36,6 +37,15 @@ describe("training scoring", () => {
   it("marks a slow but accurate note as weak", () => {
     const summary = summarizeTraining([trial(60, 300, true), trial(62, 1500, true)]);
     expect(summary.weakNotes[0].midi).toBe(62);
+  });
+
+  it("summarises Performance timing grades without adding them to self-paced sessions", () => {
+    expect(summarizeTraining([trial(60, 100, true)]).timingGrades).toBeUndefined();
+    expect(summarizeTraining([
+      trial(60, 100, true, "perfect"),
+      trial(62, 450, true, "cool"),
+      trial(64, 900, false, "bad"),
+    ]).timingGrades).toEqual({ perfect: 1, great: 0, cool: 1, bad: 1, miss: 0 });
   });
 
   it("scores accumulated totals so history can rank notes before a session starts", () => {

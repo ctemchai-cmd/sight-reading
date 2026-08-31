@@ -3,6 +3,7 @@ import type { Clef, KeyName, MidiNumber, TargetNote, RangePreset } from "@/types
 export type InputSource = "touch" | "computer-keyboard" | "midi";
 export type TrainingMode = "reflex" | "flash" | "performance" | "sheet";
 export type SessionEndReason = "target-reached" | "user-stopped";
+export type PerformanceTimingGrade = "perfect" | "great" | "cool" | "bad" | "miss";
 /** How far the line is allowed to move between notes, in scale degrees. */
 export type MelodicShape = "steps" | "thirds" | "leaps" | "random";
 
@@ -36,6 +37,8 @@ export interface TrainingTrial {
   correctResponseMs: number | null;
   firstAttemptMs: number;
   firstTryCorrect: boolean;
+  /** Present only when a metronome owns the target's timing window. */
+  timingGrade?: PerformanceTimingGrade;
 }
 
 export interface WeakNoteStat {
@@ -60,6 +63,8 @@ export interface TrainingSummary {
   averageResponseMs: number | null;
   medianResponseMs: number | null;
   bestResponseMs: number | null;
+  /** Immediate Performance result; response times and tempo can reproduce it later. */
+  timingGrades?: Record<PerformanceTimingGrade, number>;
   weakNotes: WeakNoteStat[];
 }
 
