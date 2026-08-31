@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 interface StaffHarnessProps {
   notes: Array<{ expectedMidi: number }>;
   currentIndex: number;
-  performanceFeedback?: { noteIndex: number; kind: string } | null;
+  performanceFeedbacks?: Array<{ noteIndex: number; kind: string }>;
 }
 
 const trainingHarness = vi.hoisted(() => ({
@@ -123,7 +123,7 @@ describe("NoteTrainer clock lifecycle", () => {
     });
 
     expect(trainingHarness.staffProps?.currentIndex).toBe(1);
-    expect(trainingHarness.staffProps?.performanceFeedback).toMatchObject({ noteIndex: 1, kind: "perfect" });
+    expect(trainingHarness.staffProps?.performanceFeedbacks?.at(-1)).toMatchObject({ noteIndex: 1, kind: "perfect" });
   });
 
   it("switches the scoring zone at the midpoint between notes", async () => {
@@ -157,7 +157,7 @@ describe("NoteTrainer clock lifecycle", () => {
         occurredAtMs: firstBeatAt + 599,
       });
     });
-    expect(trainingHarness.staffProps?.performanceFeedback).toMatchObject({ noteIndex: 0, kind: "wrong" });
+    expect(trainingHarness.staffProps?.performanceFeedbacks?.at(-1)).toMatchObject({ noteIndex: 0, kind: "wrong" });
 
     await act(async () => {
       trainingHarness.midiNoteOn?.({
@@ -167,7 +167,7 @@ describe("NoteTrainer clock lifecycle", () => {
         occurredAtMs: firstBeatAt + 600,
       });
     });
-    expect(trainingHarness.staffProps?.performanceFeedback).toMatchObject({ noteIndex: 1, kind: "bad" });
+    expect(trainingHarness.staffProps?.performanceFeedbacks?.at(-1)).toMatchObject({ noteIndex: 1, kind: "bad" });
 
     act(() => vi.advanceTimersByTime(1_200));
     expect(trainingHarness.staffProps?.currentIndex).toBe(1);
@@ -179,6 +179,33 @@ describe("NoteTrainer clock lifecycle", () => {
         occurredAtMs: performance.now(),
       });
     });
-    expect(trainingHarness.staffProps?.performanceFeedback).toMatchObject({ noteIndex: 1, kind: "bad" });
+    expect(trainingHarness.staffProps?.performanceFeedbacks?.at(-1)).toMatchObject({ noteIndex: 1, kind: "bad" });
+  });
+
+  it("keeps an early next-note grade visible when the previous note becomes Miss", async () => {
+    render(<NoteTrainer mode="performance" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Start training/i }));
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(4_200));
+    const nextMidi = trainingHarness.staffProps?.notes[1]?.expectedMidi;
+    expect(nextMidi).toBeDefined();
+
+    await act(async () => {
+      trainingHarness.midiNoteOn?.({
+        midi: nextMidi!,
+        velocity: 100,
+        source: "midi",
+        occurredAtMs: performance.now(),
+      });
+    });
+    act(() => vi.advanceTimersByTime(600));
+
+    expect(trainingHarness.staffProps?.performanceFeedbacks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ noteIndex: 1, kind: "bad" }),
+      expect.objectContaining({ noteIndex: 0, kind: "miss" }),
+    ]));
   });
 });

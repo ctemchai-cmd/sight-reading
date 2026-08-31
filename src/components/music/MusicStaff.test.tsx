@@ -50,7 +50,7 @@ describe("MusicStaff Performance cursor", () => {
         beatCursorRunning
         beatDurationMs={1_000}
         beatStartedAtMs={performance.now() - 250}
-        performanceFeedback={{ id: 1, noteIndex: 0, kind: "perfect" }}
+        performanceFeedbacks={[{ id: 1, noteIndex: 0, kind: "perfect" }]}
       />,
     );
 
@@ -76,11 +76,17 @@ describe("MusicStaff Performance cursor", () => {
         beatCursorRunning
         beatDurationMs={1_000}
         beatStartedAtMs={performance.now() - 300}
-        performanceFeedback={{ id: 2, noteIndex: 0, kind: "wrong" }}
+        performanceFeedbacks={[
+          { id: 1, noteIndex: 0, kind: "perfect" },
+          { id: 2, noteIndex: 1, kind: "wrong" },
+        ]}
       />,
     );
     expect(await waitFor(() => container.querySelector(".performance-hit-grade-wrong"))).toHaveTextContent("Wrong");
-    await waitFor(() => expect(note?.style.fill).toBe("#fb7185"));
+    expect(container.querySelector(".performance-hit-grade-perfect")).toHaveTextContent("Perfect");
+    const wrongNote = container.querySelector<SVGElement>('[data-performance-note-index="1"]');
+    await waitFor(() => expect(wrongNote?.style.fill).toBe("#fb7185"));
+    expect(note?.style.fill).toBe("#38bdf8");
 
     rerender(
       <MusicStaff

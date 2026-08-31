@@ -53,6 +53,8 @@ interface PendingPerformanceTrial {
 const STREAM_LOOKAHEAD = 8;
 /** Beats of metronome before the first note, so the pulse is established first. */
 const COUNT_IN_BEATS = 4;
+const PERFORMANCE_FEEDBACK_LIFETIME_MS = 820;
+const MAX_PERFORMANCE_FEEDBACKS = 16;
 const TEMPO_CHOICES = [40, 50, 60, 72, 84, 100, 120];
 const TIMING_GRADE_LABELS: Record<PerformanceTimingGrade, string> = {
   perfect: "Perfect",
@@ -112,8 +114,9 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const openTrialRef = useRef<OpenTrial | null>(null);
   const generatorRef = useRef<NoteGenerator | null>(null);
   const [feedback, setFeedback] = useState<"correct" | "incorrect" | null>(null);
-  const [performanceFeedback, setPerformanceFeedback] = useState<PerformanceFeedbackEvent | null>(null);
+  const [performanceFeedbacks, setPerformanceFeedbacks] = useState<PerformanceFeedbackEvent[]>([]);
   const performanceFeedbackIdRef = useRef(0);
+  const performanceFeedbackTimersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const [summary, setSummary] = useState<TrainingSummary | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saving");
   const [attemptCount, setAttemptCount] = useState(0);
@@ -147,11 +150,13 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     [performancePageStart, stream, timed],
   );
   const visibleIndex = timed ? streamIndex - performancePageStart : streamIndex;
-  const visiblePerformanceFeedback = performanceFeedback
-    && performanceFeedback.noteIndex >= performancePageStart
-    && performanceFeedback.noteIndex < performancePageStart + PERFORMANCE_NOTES_PER_LINE
-    ? { ...performanceFeedback, noteIndex: performanceFeedback.noteIndex - performancePageStart }
-    : null;
+  const visiblePerformanceFeedbacks = performanceFeedbacks
+    .filter((event) => (
+      event.noteIndex >= performancePageStart
+      && event.noteIndex < performancePageStart + PERFORMANCE_NOTES_PER_LINE
+    ))
+    .map((event) => ({ ...event, noteIndex: event.noteIndex - performancePageStart }));
+  const latestPerformanceFeedback = performanceFeedbacks[performanceFeedbacks.length - 1] ?? null;
 
   useEffect(() => {
     configRef.current = config;
@@ -251,7 +256,13 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
 
   const showPerformanceFeedback = useCallback((kind: PerformanceFeedbackEvent["kind"], noteIndex: number) => {
     performanceFeedbackIdRef.current += 1;
-    setPerformanceFeedback({ id: performanceFeedbackIdRef.current, noteIndex, kind });
+    const event = { id: performanceFeedbackIdRef.current, noteIndex, kind };
+    setPerformanceFeedbacks((current) => [...current, event].slice(-MAX_PERFORMANCE_FEEDBACKS));
+    const timer = setTimeout(() => {
+      setPerformanceFeedbacks((current) => current.filter((item) => item.id !== event.id));
+      performanceFeedbackTimersRef.current.delete(event.id);
+    }, PERFORMANCE_FEEDBACK_LIFETIME_MS);
+    performanceFeedbackTimersRef.current.set(event.id, timer);
   }, []);
 
   /** Closes the beat with whatever the player managed, played or not. */
@@ -485,7 +496,9 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     setTrials([]);
     setSummary(null);
     setFeedback(null);
-    setPerformanceFeedback(null);
+    for (const timer of performanceFeedbackTimersRef.current.values()) clearTimeout(timer);
+    performanceFeedbackTimersRef.current.clear();
+    setPerformanceFeedbacks([]);
     setBeatStartedAtMs(0);
     setAttemptCount(0);
     openTrialRef.current = null;
@@ -554,6 +567,8 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     phaseRef.current = "complete";
     armedRef.current = false;
     pendingPerformanceTrialRef.current = null;
+    for (const timer of performanceFeedbackTimersRef.current.values()) clearTimeout(timer);
+    performanceFeedbackTimersRef.current.clear();
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
     timeoutRef.current = null;
@@ -735,14 +750,14 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
             beatCursorRunning={timed && phase === "running" && countIn === 0}
             beatDurationMs={timed ? 60000 / config.tempoBpm : undefined}
             beatStartedAtMs={timed ? beatStartedAtMs : undefined}
-            performanceFeedback={timed ? visiblePerformanceFeedback : undefined}
+            performanceFeedbacks={timed ? visiblePerformanceFeedbacks : undefined}
             fill={focusMode}
             onReady={markTargetReady}
           />
         )}
         <div className={timed ? "sr-only" : "training-feedback mt-3 h-6 text-center text-sm font-semibold"} aria-live="polite">
-          {timed && performanceFeedback?.kind === "wrong" && "Wrong note"}
-          {timed && performanceFeedback?.kind !== "wrong" && performanceFeedback && TIMING_GRADE_LABELS[performanceFeedback.kind]}
+          {timed && latestPerformanceFeedback?.kind === "wrong" && "Wrong note"}
+          {timed && latestPerformanceFeedback?.kind !== "wrong" && latestPerformanceFeedback && TIMING_GRADE_LABELS[latestPerformanceFeedback.kind]}
           {!timed && feedback === "incorrect" && <span className="text-rose-300">✕ Wrong note</span>}
           {!timed && feedback === "correct" && <span className="text-teal-300">✓ Correct</span>}
         </div>

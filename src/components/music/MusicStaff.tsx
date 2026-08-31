@@ -50,6 +50,7 @@ const PERFORMANCE_FEEDBACK_LABELS: Record<PerformanceFeedbackKind, string> = {
   miss: "Miss",
   wrong: "Wrong",
 };
+const EMPTY_PERFORMANCE_FEEDBACKS: PerformanceFeedbackEvent[] = [];
 
 interface MusicStaffProps {
   notes: TargetNote[];
@@ -63,7 +64,7 @@ interface MusicStaffProps {
   beatCursorRunning?: boolean;
   beatDurationMs?: number;
   beatStartedAtMs?: number;
-  performanceFeedback?: PerformanceFeedbackEvent | null;
+  performanceFeedbacks?: PerformanceFeedbackEvent[];
   onReady?: () => void;
   /** Stream only: take the container's height and scale the notation to match. */
   fill?: boolean;
@@ -142,7 +143,7 @@ export function MusicStaff({
   beatCursorRunning = false,
   beatDurationMs = 0,
   beatStartedAtMs = 0,
-  performanceFeedback = null,
+  performanceFeedbacks = EMPTY_PERFORMANCE_FEEDBACKS,
   onReady,
   fill = false,
   className,
@@ -153,7 +154,7 @@ export function MusicStaff({
   const sheetLayerRef = useRef<HTMLDivElement>(null);
   const sheetCursorRef = useRef<HTMLDivElement>(null);
   const sheetNoteElementsRef = useRef<Array<SVGElement | null>>([]);
-  const paintedPerformanceNoteRef = useRef<number | null>(null);
+  const paintedPerformanceNotesRef = useRef(new Map<number, string>());
   const readyRef = useRef(onReady);
   const drawnIndexRef = useRef(-1);
   const slideRef = useRef<Animation | null>(null);
@@ -387,7 +388,7 @@ export function MusicStaff({
     }
 
     sheetNoteElementsRef.current = noteElements;
-    paintedPerformanceNoteRef.current = null;
+    paintedPerformanceNotesRef.current.clear();
     setSheetCursorPositions(cursorPositions);
 
     // Several systems will not fit at once, so keep Sheet Reading's current
@@ -408,27 +409,31 @@ export function MusicStaff({
 
   const sheetCursor = sheetCursorPositions[currentIndex] ?? null;
   const nextSheetCursor = sheetCursorPositions[currentIndex + 1] ?? null;
-  const performanceFeedbackGeometry = performanceFeedback
-    ? sheetCursorPositions[performanceFeedback.noteIndex] ?? null
-    : null;
+  const performanceFeedbackLayers = performanceFeedbacks.flatMap((event) => {
+    const geometry = sheetCursorPositions[event.noteIndex];
+    if (!geometry) return [];
+    return [{ event, geometry, stackIndex: (event.id - 1) % 3 }];
+  });
 
   useEffect(() => {
     if (!beatCursor) return;
-    const previousIndex = paintedPerformanceNoteRef.current;
-    if (previousIndex !== null) {
-      const previous = sheetNoteElementsRef.current[previousIndex];
-      if (previous) paintVexElement(previous, INK);
+    const desired = new Map<number, string>();
+    for (const event of performanceFeedbacks) {
+      const correct = event.kind !== "wrong" && event.kind !== "miss";
+      desired.set(event.noteIndex, correct ? PERFORMANCE_CORRECT : INCORRECT);
     }
-    if (!performanceFeedback) {
-      paintedPerformanceNoteRef.current = null;
-      return;
+    for (const [noteIndex] of paintedPerformanceNotesRef.current) {
+      if (desired.has(noteIndex)) continue;
+      const element = sheetNoteElementsRef.current[noteIndex];
+      if (element) paintVexElement(element, INK);
     }
-    const element = sheetNoteElementsRef.current[performanceFeedback.noteIndex];
-    if (!element) return;
-    const correct = performanceFeedback.kind !== "wrong" && performanceFeedback.kind !== "miss";
-    paintVexElement(element, correct ? PERFORMANCE_CORRECT : INCORRECT);
-    paintedPerformanceNoteRef.current = performanceFeedback.noteIndex;
-  }, [beatCursor, performanceFeedback, sheetCursorPositions]);
+    for (const [noteIndex, color] of desired) {
+      if (paintedPerformanceNotesRef.current.get(noteIndex) === color) continue;
+      const element = sheetNoteElementsRef.current[noteIndex];
+      if (element) paintVexElement(element, color);
+    }
+    paintedPerformanceNotesRef.current = desired;
+  }, [beatCursor, performanceFeedbacks, sheetCursorPositions]);
 
   useEffect(() => {
     const cursor = sheetCursorRef.current;
@@ -512,19 +517,19 @@ export function MusicStaff({
             />
           )}
           <div ref={sheetLayerRef} className="relative z-10" />
-          {performanceFeedback && performanceFeedbackGeometry && (
+          {performanceFeedbackLayers.map(({ event, geometry: feedbackGeometry, stackIndex }) => (
             <span
-              key={performanceFeedback.id}
-              className={`performance-hit-grade performance-hit-grade-${performanceFeedback.kind}`}
+              key={event.id}
+              className={`performance-hit-grade performance-hit-grade-${event.kind}`}
               style={{
-                left: performanceFeedbackGeometry.left + performanceFeedbackGeometry.width / 2,
-                top: performanceFeedbackGeometry.top + performanceFeedbackGeometry.height * 0.35,
+                left: feedbackGeometry.left + feedbackGeometry.width / 2,
+                top: feedbackGeometry.top + feedbackGeometry.height * 0.35 - stackIndex * 12,
               }}
               aria-hidden="true"
             >
-              {PERFORMANCE_FEEDBACK_LABELS[performanceFeedback.kind]}
+              {PERFORMANCE_FEEDBACK_LABELS[event.kind]}
             </span>
-          )}
+          ))}
         </div>
       )}
     </div>
