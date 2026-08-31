@@ -189,7 +189,7 @@ describe("NoteTrainer clock lifecycle", () => {
     expect(trainingHarness.staffProps?.performanceFeedbacks?.at(-1)).toMatchObject({ noteIndex: 1, kind: "bad" });
   });
 
-  it("keeps an early next-note grade visible when the previous note becomes Miss", async () => {
+  it("keeps an early next-note grade visible without showing the previous Miss", async () => {
     render(<NoteTrainer mode="performance" />);
 
     await act(async () => {
@@ -212,7 +212,9 @@ describe("NoteTrainer clock lifecycle", () => {
 
     expect(trainingHarness.staffProps?.performanceFeedbacks).toEqual(expect.arrayContaining([
       expect.objectContaining({ noteIndex: 1, kind: "bad" }),
-      expect.objectContaining({ noteIndex: 0, kind: "miss" }),
+    ]));
+    expect(trainingHarness.staffProps?.performanceFeedbacks).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "miss" }),
     ]));
   });
 

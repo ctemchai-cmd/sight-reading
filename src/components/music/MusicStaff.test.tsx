@@ -88,9 +88,11 @@ describe("MusicStaff Performance cursor", () => {
     const wrongNote = container.querySelector<SVGElement>('[data-performance-note-index="1"]');
     await waitFor(() => expect(wrongNote?.style.fill).toBe("#fb7185"));
     expect(note?.style.fill).toBe("#38bdf8");
-    // A note that went by unplayed is greyed out rather than marked wrong.
+    expect(container.querySelector(".performance-hit-grade-miss")).toBeNull();
+    // A miss remains visually untouched so the eye can stay on what comes next.
     const missedNote = container.querySelector<SVGElement>('[data-performance-note-index="2"]');
-    await waitFor(() => expect(missedNote?.style.fill).toBe("#94a3b8"));
+    expect(missedNote?.style.fill).toBe("");
+    expect(missedNote?.getAttribute("fill")).toBe("#0f172a");
 
     rerender(
       <MusicStaff

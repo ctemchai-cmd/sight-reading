@@ -21,8 +21,6 @@ const INK = "#0f172a";
 const CORRECT = "#2dd4bf";
 const INCORRECT = "#fb7185";
 const PERFORMANCE_CORRECT = "#38bdf8";
-/** A note that went by unplayed reads as skipped, not as an error. */
-const PERFORMANCE_MISSED = "#94a3b8";
 const SHEET_PLAYED = "#64748b";
 const STREAM_PLAYED = "#94a3b8";
 const SLIDE_MS = 300;
@@ -424,6 +422,7 @@ export function MusicStaff({
   const nextSheetCursor =
     (leadingIn ? sheetCursorPositions[currentIndex] : sheetCursorPositions[currentIndex + 1]) ?? null;
   const performanceFeedbackLayers = performanceFeedbacks.flatMap((event) => {
+    if (event.kind === "miss") return [];
     const geometry = sheetCursorPositions[event.noteIndex];
     if (!geometry) return [];
     return [{ event, geometry, stackIndex: (event.id - 1) % 3 }];
@@ -433,8 +432,8 @@ export function MusicStaff({
     if (!beatCursor) return;
     const desired = new Map<number, string>();
     for (const event of performanceFeedbacks) {
-      if (event.kind === "miss") desired.set(event.noteIndex, PERFORMANCE_MISSED);
-      else if (event.kind === "wrong") desired.set(event.noteIndex, INCORRECT);
+      if (event.kind === "miss") continue;
+      if (event.kind === "wrong") desired.set(event.noteIndex, INCORRECT);
       else desired.set(event.noteIndex, PERFORMANCE_CORRECT);
     }
     for (const [noteIndex] of paintedPerformanceNotesRef.current) {

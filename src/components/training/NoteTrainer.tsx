@@ -294,12 +294,11 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     const open = openTrialRef.current;
     const closed = hitRef.current ?? (open ? { ...missTrial(open, atMs), timingGrade: "miss" as const } : null);
     if (!closed) return trialsRef.current;
-    if (!hitRef.current) showPerformanceFeedback("miss", streamIndexRef.current);
     const next = [...trialsRef.current, closed];
     trialsRef.current = next;
     setTrials(next);
     return next;
-  }, [showPerformanceFeedback]);
+  }, []);
 
   function consumePendingPerformanceTrial(beatAtMs: number): boolean {
     const pending = pendingPerformanceTrialRef.current;

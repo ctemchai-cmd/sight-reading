@@ -138,12 +138,6 @@ textarea,
   color: #fbbf24;
 }
 
-/* Playing the wrong note is a mistake; letting one go by is not the same
-   thing, and colouring both alike said it was. */
-.performance-hit-grade-miss {
-  color: #94a3b8;
-}
-
 .performance-hit-grade-wrong {
   color: #fb7185;
 }
