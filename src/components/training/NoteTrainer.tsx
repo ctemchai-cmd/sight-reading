@@ -147,10 +147,13 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     if (completedTrials.length === 0) return;
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
+    timeoutRef.current = null;
+    beatTimerRef.current = null;
     phaseRef.current = "complete";
     setPhase("complete");
     setFocusMode(false);
     armedRef.current = false;
+    engine.current?.stopAll();
     const nextSummary = summarizeTraining(completedTrials);
     setSummary(nextSummary);
     setSaveStatus("saving");
@@ -167,7 +170,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     };
     const status = await persistTrainingSession(session);
     setSaveStatus(status);
-  }, [mode, setFocusMode]);
+  }, [engine, mode, setFocusMode]);
 
   const extendStream = useCallback((throughIndex: number) => {
     const generator = generatorRef.current;
@@ -286,6 +289,9 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
 
   async function startSession(focusMidis?: number[]): Promise<void> {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
+    timeoutRef.current = null;
+    beatTimerRef.current = null;
     if (configRef.current.soundEnabled) await initializeAudio();
     // Resolve a random choice now, so the session records the key it landed on.
     const keySignature = keyChoice === "random" ? randomKey() : keyChoice;
@@ -343,6 +349,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     armedRef.current = false;
     openTrialRef.current = null;
     if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
+    beatTimerRef.current = null;
     engine.current?.stopAll();
   };
 
@@ -367,9 +374,17 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   };
 
   useEffect(() => () => {
+    // A timer callback may already be queued when client-side navigation
+    // unmounts the trainer. Make that callback terminal before clearing its
+    // handle, otherwise it still sees "running" and schedules the next beat.
+    phaseRef.current = "complete";
+    armedRef.current = false;
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
-  }, []);
+    timeoutRef.current = null;
+    beatTimerRef.current = null;
+    engine.current?.stopAll();
+  }, [engine]);
 
   if (phase === "configure") {
     return (

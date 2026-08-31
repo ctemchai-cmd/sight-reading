@@ -151,5 +151,6 @@ export class ToneAudioEngine implements AudioEngine {
 
   stopAll(): void {
     this.instrument?.releaseAll();
+    this.metronome?.triggerRelease();
   }
 }
