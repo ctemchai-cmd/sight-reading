@@ -27,6 +27,12 @@ const audioEngine = {
 };
 const engineRef = { current: audioEngine };
 
+// Rendered bare here, without the Suspense boundary the routes provide, so the
+// hook has no router to read from.
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 vi.mock("@/components/music/MusicStaff", () => ({
   MusicStaff: (props: StaffHarnessProps) => {
     trainingHarness.staffProps = props;

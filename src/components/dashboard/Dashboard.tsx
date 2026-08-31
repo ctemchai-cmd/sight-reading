@@ -1,17 +1,25 @@
 "use client";
 
-import { Cloud, LogIn, LogOut, RefreshCw } from "lucide-react";
+import { Cloud, LogIn, LogOut, RefreshCw, Target } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatNoteName, midiToNotatedPitch } from "@/core/music/notes";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+
+const MODE_LINES: Record<string, { color: string; label: string }> = {
+  reflex: { color: "#2dd4bf", label: "Reflex" },
+  flash: { color: "#38bdf8", label: "Flash" },
+  performance: { color: "#a78bfa", label: "Performance" },
+  sheet: { color: "#fbbf24", label: "Sheet" },
+};
 import { cn, formatMilliseconds } from "@/lib/utils";
 import { accuracyFluency, fluencyColor, responseFluency } from "@/core/training/fluency";
 import { summarisePractice } from "@/core/training/practiceHistory";
 import { PitchKeyboard, type KeyReading } from "@/components/dashboard/PitchKeyboard";
+import { HISTORY_FAILURE_ADVICE, classifyHistoryFailure } from "@/lib/historyFailure";
 import { loadNoteHistory } from "@/lib/noteStats";
 import { flushPendingSessions } from "@/lib/sessionPersistence";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -102,11 +110,30 @@ export function Dashboard() {
 
   const practice = useMemo(() => summarisePractice(sessions.map((session) => session.completedAt)), [sessions]);
 
-  const trend = [...sessions].reverse().map((session, index) => ({
-    session: index + 1,
-    speed: session.averageResponseMs ? Math.round(session.averageResponseMs) : null,
-    accuracy: Math.round(session.accuracy * 100),
-  }));
+  // Each mode asks something different of the reader, so their response times
+  // are not on one scale — a single line across all of them showed steps that
+  // were changes of exercise rather than of skill.
+  const trend = useMemo(
+    () => [...sessions].reverse().map((session, index) => ({
+      session: index + 1,
+      [session.mode]: session.averageResponseMs ? Math.round(session.averageResponseMs) : null,
+    })),
+    [sessions],
+  );
+  const trendModes = useMemo(
+    () => [...new Set(sessions.map((session) => session.mode))],
+    [sessions],
+  );
+  /** The pitches the current view ranks worst, for the practise link. */
+  const weakestMidis = useMemo(
+    () => [...noteStats]
+      .sort((a, b) => b.weakScore - a.weakScore)
+      .slice(0, 6)
+      .map((stat) => stat.midi)
+      .sort((a, b) => a - b),
+    [noteStats],
+  );
+
   const keyReadings = useMemo(() => {
     const readings = new Map<number, KeyReading>();
     for (const stat of noteStats) {
@@ -139,9 +166,8 @@ export function Dashboard() {
           <p className="font-semibold">Your history could not be read</p>
           <p className="mt-1 leading-6">
             The page below is empty because the request was refused, not because there is nothing recorded.
-            Signing in again fixes an expired session; a refusal that survives that is the database declining
-            the request, and the grants in <code>supabase/migrations/</code> are the thing to check.
           </p>
+          <p className="mt-2 leading-6">{HISTORY_FAILURE_ADVICE[classifyHistoryFailure(loadError)]}</p>
           <p className="mt-2 font-mono text-xs text-rose-300">{loadError}</p>
         </Card>
       )}
@@ -198,7 +224,7 @@ export function Dashboard() {
         <Card className="mt-6 p-6 text-center sm:p-12"><p className="text-lg font-semibold text-white">No completed sessions yet</p><p className="mt-2 text-sm text-slate-400">Finish a Reflex or Sheet Reading session to populate the dashboard.</p><Link href="/train/reflex"><Button className="mt-5 w-full sm:w-auto">Start Reflex</Button></Link></Card>
       ) : (
         <div className="mt-6 grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-          <Card className="min-w-0 p-4 sm:p-5"><h2 className="font-semibold text-white">Average response over sessions</h2><div className="mt-5 h-64 sm:h-72"><ResponsiveContainer width="100%" height="100%"><LineChart data={trend}><CartesianGrid stroke="#1e293b" vertical={false} /><XAxis dataKey="session" stroke="#64748b" /><YAxis stroke="#64748b" unit="ms" width={52} /><Tooltip contentStyle={{ background: "#0f172a", borderColor: "#334155", borderRadius: 12 }} /><Line type="monotone" dataKey="speed" stroke="#2dd4bf" strokeWidth={3} dot={false} /></LineChart></ResponsiveContainer></div></Card>
+          <Card className="min-w-0 p-4 sm:p-5"><h2 className="font-semibold text-white">Average response over sessions</h2><p className="mt-1 text-xs text-slate-400">One line per mode — each asks something different, so their times only compare with themselves</p><div className="mt-4 h-64 sm:h-72"><ResponsiveContainer width="100%" height="100%"><LineChart data={trend}><CartesianGrid stroke="#1e293b" vertical={false} /><XAxis dataKey="session" stroke="#64748b" /><YAxis stroke="#64748b" unit="ms" width={52} /><Tooltip contentStyle={{ background: "#0f172a", borderColor: "#334155", borderRadius: 12 }} /><Legend />{trendModes.map((mode) => <Line key={mode} type="monotone" dataKey={mode} name={MODE_LINES[mode]?.label ?? mode} stroke={MODE_LINES[mode]?.color ?? "#94a3b8"} strokeWidth={3} dot={false} connectNulls />)}</LineChart></ResponsiveContainer></div></Card>
           <Card className="p-5"><h2 className="font-semibold text-white">Weakest notes</h2><div className="mt-4 space-y-3">{[...noteStats].sort((a, b) => b.weakScore - a.weakScore).slice(0, 6).map((stat) => <div key={stat.midi} className="flex items-center justify-between rounded-xl bg-slate-950/60 p-3"><span className="font-semibold text-white">{formatNoteName(midiToNotatedPitch(stat.midi))}</span><span className="text-right text-sm text-slate-400">{formatMilliseconds(stat.medianResponseMs)}<span className="block text-xs">{Math.round(stat.firstTryAccuracy * 100)}%</span></span></div>)}</div></Card>
         </div>
       )}
@@ -207,6 +233,13 @@ export function Dashboard() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-white">Which keys read fluently</h2><p className="mt-1 text-xs text-slate-400">{heatmapMetric === "speed" ? "Green under 0.8s, red at 2.5s and slower" : "Green at 95% first try, red at 50% and below"} · unpractised keys stay plain</p></div><div className="grid grid-cols-2 rounded-lg border border-slate-700 p-1"><button onClick={() => setHeatmapMetric("speed")} className={`rounded-md px-3 py-1 text-sm ${heatmapMetric === "speed" ? "bg-slate-700 text-white" : "text-slate-400"}`}>Response</button><button onClick={() => setHeatmapMetric("accuracy")} className={`rounded-md px-3 py-1 text-sm ${heatmapMetric === "accuracy" ? "bg-slate-700 text-white" : "text-slate-400"}`}>Accuracy</button></div></div>
         <div className="mt-5">
           <PitchKeyboard readings={keyReadings} />
+          {weakestMidis.length > 0 && (
+            <Link href={`/train/reflex?focus=${weakestMidis.join(",")}`}>
+              <Button className="mt-4 w-full sm:w-auto" size="sm">
+                <Target className="size-4" /> Practise these {weakestMidis.length} pitches
+              </Button>
+            </Link>
+          )}
           <div className="mt-3 flex items-center gap-3 text-xs text-slate-400">
             <span>Worked out</span>
             <span

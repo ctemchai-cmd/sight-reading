@@ -4,6 +4,7 @@ import {
   accidentalCount,
   isAccidentalImplied,
   isInKey,
+  keyCovering,
   scaleDegrees,
   scaleMidisInRange,
   spellInKey,
@@ -95,5 +96,12 @@ describe("key signatures", () => {
         expect(isAccidentalImplied(key, spellInKey(key, midi)), `${key} at ${midi}`).toBe(true);
       }
     }
+  });
+
+  it("picks the key that spells the most of a set of pitches", () => {
+    expect(keyCovering([])).toBe("C");
+    expect(keyCovering([60, 62, 64, 65, 67])).toBe("C"); // all naturals
+    // F sharp and C sharp belong to D major, not to C.
+    expect(keyCovering([66, 61, 62, 69])).toBe("D");
   });
 });

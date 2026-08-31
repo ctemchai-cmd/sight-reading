@@ -1,6 +1,7 @@
 "use client";
 
 import { Maximize2, Pause, Play, RotateCcw, Square } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MusicStaff } from "@/components/music/MusicStaff";
 import { PianoKeyboard } from "@/components/music/PianoKeyboard";
@@ -8,9 +9,9 @@ import { FocusSurface } from "@/components/training/FocusSurface";
 import { SessionResult } from "@/components/training/SessionResult";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/keys";
+import { KEY_NAMES, describeKey, formatKeyName, keyCovering, randomKey } from "@/core/music/keys";
 import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
-import { formatClef, resolveRange } from "@/core/music/notes";
+import { formatClef, formatNoteName, midiToNotatedPitch, resolveRange } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
 import {
   PERFORMANCE_NOTES_PER_LINE,
@@ -102,7 +103,26 @@ const DEFAULT_CONFIG: TrainingSessionConfig = {
 export function NoteTrainer({ mode }: NoteTrainerProps) {
   const [phase, setPhase] = useState<Phase>("configure");
   const phaseRef = useRef<Phase>("configure");
-  const [config, setConfig] = useState<TrainingSessionConfig>({ ...DEFAULT_CONFIG, mode });
+  const searchParams = useSearchParams();
+  /** Pitches carried in from the dashboard's "practise these" link. */
+  const focusMidis = useMemo(() => {
+    const raw = searchParams.get("focus");
+    if (!raw) return [];
+    return [...new Set(raw.split(",").map(Number))]
+      .filter((midi) => Number.isInteger(midi) && midi >= 0 && midi <= 127)
+      .sort((a, b) => a - b);
+  }, [searchParams]);
+
+  // A focus link aims the session at the pitches it names: the range widens to
+  // reach them and the key becomes the one spelling the most, or the generator
+  // would drop whichever fall outside whatever key happened to be set.
+  const [config, setConfig] = useState<TrainingSessionConfig>(() => ({
+    ...DEFAULT_CONFIG,
+    mode,
+    ...(focusMidis.length
+      ? { rangePreset: "custom" as const, minMidi: focusMidis[0], maxMidi: focusMidis[focusMidis.length - 1] }
+      : {}),
+  }));
   const configRef = useRef(config);
   const [stream, setStream] = useState<TargetNote[]>([]);
   const streamRef = useRef<TargetNote[]>([]);
@@ -122,7 +142,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saving");
   const [attemptCount, setAttemptCount] = useState(0);
   const { focusMode, setFocusMode, toggleFocusMode } = useFocusMode();
-  const [keyChoice, setKeyChoice] = useState<KeyName | "random">("C");
+  const [keyChoice, setKeyChoice] = useState<KeyName | "random">(() => keyCovering(focusMidis));
   const [clefChoice, setClefChoice] = useState<Clef | "random">("treble");
   const label = mode === "flash" ? "Flash" : mode === "performance" ? "Performance" : "Reflex";
   const timed = mode === "performance";
@@ -611,6 +631,12 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-300">{label} trainer</p>
           <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">Configure your session</h1>
           <p className="mt-3 text-slate-400">Notes of the chosen key · Chrome Desktop</p>
+          {focusMidis.length > 0 && (
+            <p className="mt-3 rounded-xl border border-teal-400/40 bg-teal-400/10 p-3 text-sm text-teal-200">
+              Drilling {focusMidis.length} {focusMidis.length === 1 ? "pitch" : "pitches"} you read slowest:{" "}
+              {focusMidis.map((midi) => formatNoteName(midiToNotatedPitch(midi))).join(", ")}
+            </p>
+          )}
           <p className="mt-1 text-xs text-slate-500">Computer keyboard: {computerKeyboardGuide}</p>
         </div>
         <Card className="grid gap-5 p-4 sm:p-6 md:grid-cols-2 md:gap-6">
@@ -719,7 +745,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
             <input type="checkbox" checked={config.soundEnabled} onChange={(event) => setConfig((current) => ({ ...current, soundEnabled: event.target.checked }))} /> App sound
           </label>
           <div className="flex justify-end md:col-span-2">
-            <Button className="w-full sm:w-auto" size="lg" onClick={() => void startSession()} disabled={config.minMidi > config.maxMidi}><Play className="size-5" /> Start training</Button>
+            <Button className="w-full sm:w-auto" size="lg" onClick={() => void startSession(focusMidis.length ? focusMidis : undefined)} disabled={config.minMidi > config.maxMidi}><Play className="size-5" /> Start training</Button>
           </div>
         </Card>
       </div>

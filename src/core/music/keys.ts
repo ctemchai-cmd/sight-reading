@@ -121,3 +121,13 @@ export function describeKey(key: KeyName): string {
 export function randomKey(random: () => number = Math.random): KeyName {
   return KEY_NAMES[Math.floor(random() * KEY_NAMES.length)];
 }
+
+/** The key that spells the most of these pitches, for drilling a chosen set. */
+export function keyCovering(midis: number[]): KeyName {
+  if (midis.length === 0) return "C";
+  return KEY_NAMES.reduce((chosen, key) => (
+    midis.filter((midi) => isInKey(key, midi)).length > midis.filter((midi) => isInKey(chosen, midi)).length
+      ? key
+      : chosen
+  ), KEY_NAMES[0]);
+}
