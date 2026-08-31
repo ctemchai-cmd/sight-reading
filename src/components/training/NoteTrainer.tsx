@@ -733,9 +733,15 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
 
       <Card className="note-training-staff relative p-3 sm:p-5">
         {countIn > 0 && (
-          <div className="absolute inset-0 z-30 grid place-items-center rounded-2xl bg-slate-950/80">
-            <p className="text-6xl font-bold text-teal-300">{countIn}</p>
-          </div>
+          // A count-in is time to read the first note, so it must not cover it:
+          // this used to be a full-card overlay, which meant the music appeared
+          // at the exact moment it had to be played.
+          <p
+            className="pointer-events-none absolute bottom-2 left-3 z-30 grid size-11 place-items-center rounded-full bg-slate-950/70 text-xl font-bold text-teal-300"
+            aria-label={`Starting in ${countIn}`}
+          >
+            {countIn}
+          </p>
         )}
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={resume}><Play className="size-4" /> Resume session</Button></div>}
         {visibleNotes.length > 0 && (
