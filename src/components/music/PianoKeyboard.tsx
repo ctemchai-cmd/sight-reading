@@ -42,6 +42,9 @@ export function PianoKeyboard({
   onNoteOff,
 }: PianoKeyboardProps) {
   const [pressed, setPressed] = useState<Set<number>>(new Set());
+  // Two fingers land before React commits either one, so the render's copy of
+  // what is held down is already stale by the time the first is let go.
+  const pressedRef = useRef<Set<number>>(new Set());
   const [viewportWidth, setViewportWidth] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -93,21 +96,29 @@ export function PianoKeyboard({
   };
 
   const press = (event: PointerEvent<HTMLButtonElement>, midi: number) => {
-    if (disabled) return;
+    if (disabled || pressedRef.current.has(midi)) return;
     event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setPressed((current) => new Set(current).add(midi));
+    pressedRef.current = new Set(pressedRef.current).add(midi);
+    setPressed(pressedRef.current);
     onNoteOn(midi, 100);
+    // Capture keeps the release on this key when a finger slides off it, but a
+    // pointer that has already gone makes it throw — and sounding the note
+    // matters more than tidying up its release, so it goes first and this may
+    // fail. Playing quickly used to swallow notes for exactly this reason.
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Not capturable; pointercancel and pointerup still release the note.
+    }
   };
 
   const release = (event: PointerEvent<HTMLButtonElement>, midi: number) => {
-    if (!pressed.has(midi)) return;
+    if (!pressedRef.current.has(midi)) return;
     event.preventDefault();
-    setPressed((current) => {
-      const next = new Set(current);
-      next.delete(midi);
-      return next;
-    });
+    const next = new Set(pressedRef.current);
+    next.delete(midi);
+    pressedRef.current = next;
+    setPressed(next);
     onNoteOff(midi);
   };
 

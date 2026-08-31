@@ -177,6 +177,24 @@ html[data-focus-mode="true"] .app-nav {
   display: none;
 }
 
+/* Two quick taps anywhere in a training view are two notes, never a request to
+   zoom. `manipulation` drops the double-tap gesture while leaving a deliberate
+   pinch alone, so the page can still be enlarged to read. It does not inherit,
+   so every surface a stray tap can land on has to say it; the keys themselves
+   keep the stricter `none`. */
+.note-training-layout,
+.sheet-training-layout,
+.focus-training-surface,
+.note-training-staff,
+.sheet-training-staff,
+.note-training-inputs,
+.sheet-training-inputs,
+.music-staff,
+.responsive-piano-surface,
+.responsive-piano-surface div {
+  touch-action: manipulation;
+}
+
 .focus-training-surface {
   position: fixed;
   inset: 0;
