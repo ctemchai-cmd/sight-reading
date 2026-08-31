@@ -14,10 +14,10 @@ import { formatClef, resolveRange } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
 import {
   PERFORMANCE_NOTES_PER_LINE,
-  PERFORMANCE_VISIBLE_LINES,
   gradePerformanceTiming,
   isPerformanceLookaheadWindow,
   performancePageLastIndex,
+  startsPerformanceLine,
 } from "@/core/training/performance";
 import { calculateWeakNoteStats, mergeNoteStats, summarizeTraining } from "@/core/training/scoring";
 import { applyInputToTrial, createOpenTrial, missTrial, type OpenTrial } from "@/core/training/session";
@@ -133,6 +133,8 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const beatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The trial the player closed by hitting the note, held until the beat ends.
   const hitRef = useRef<TrainingTrial | null>(null);
+  // True while a beat is being spent on a page turn rather than on a note.
+  const pageRestRef = useRef(false);
   const pendingPerformanceTrialRef = useRef<PendingPerformanceTrial | null>(null);
   const startedAtRef = useRef("");
   const armedRef = useRef(false);
@@ -146,7 +148,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   // every grade/beat render made VexFlow redraw the score and delayed motion.
   const visibleNotes = useMemo(
     () => timed
-      ? stream.slice(performancePageStart, performancePageStart + PERFORMANCE_NOTES_PER_LINE * PERFORMANCE_VISIBLE_LINES)
+      ? stream.slice(performancePageStart, performancePageStart + PERFORMANCE_NOTES_PER_LINE)
       : stream,
     [performancePageStart, stream, timed],
   );
@@ -154,7 +156,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const visiblePerformanceFeedbacks = performanceFeedbacks
     .filter((event) => (
       event.noteIndex >= performancePageStart
-      && event.noteIndex < performancePageStart + PERFORMANCE_NOTES_PER_LINE * PERFORMANCE_VISIBLE_LINES
+      && event.noteIndex < performancePageStart + PERFORMANCE_NOTES_PER_LINE
     ))
     .map((event) => ({ ...event, noteIndex: event.noteIndex - performancePageStart }));
   const latestPerformanceFeedback = performanceFeedbacks[performanceFeedbacks.length - 1] ?? null;
@@ -308,6 +310,12 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       if (countInRef.current === 0) {
         if (!consumePendingPerformanceTrial(scheduledAt)) armAt(scheduledAt);
       }
+    } else if (pageRestRef.current) {
+      // The turn's beat. The new line is already on screen and the pulse has
+      // carried on, but nothing was due, so nothing was scored.
+      pageRestRef.current = false;
+      engine.current?.click(false);
+      if (!consumePendingPerformanceTrial(scheduledAt)) armAt(scheduledAt);
     } else {
       const completed = closeBeat(scheduledAt);
       const target = configRef.current.sessionLength;
@@ -319,7 +327,16 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       setStreamIndex(streamIndexRef.current);
       extendStream(streamIndexRef.current);
       engine.current?.click(false);
-      if (!consumePendingPerformanceTrial(scheduledAt)) armAt(scheduledAt);
+      if (startsPerformanceLine(streamIndexRef.current)) {
+        // Spend this beat showing the new line rather than demanding its first
+        // note, which would otherwise arrive the instant the page turned.
+        pageRestRef.current = true;
+        openTrialRef.current = null;
+        armedRef.current = false;
+        hitRef.current = null;
+      } else if (!consumePendingPerformanceTrial(scheduledAt)) {
+        armAt(scheduledAt);
+      }
     }
 
     // Scheduled against the beat it should have landed on, not against now, so
@@ -515,6 +532,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
 
     if (timed) {
       hitRef.current = null;
+      pageRestRef.current = false;
       countInRef.current = COUNT_IN_BEATS;
       setCountIn(COUNT_IN_BEATS);
       beatAtRef.current = performance.now();
@@ -549,6 +567,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       // Counted back in, so the pulse is re-established before the music resumes.
       hitRef.current = null;
       pendingPerformanceTrialRef.current = null;
+      pageRestRef.current = false;
       countInRef.current = COUNT_IN_BEATS;
       setCountIn(COUNT_IN_BEATS);
       beatAtRef.current = performance.now();
