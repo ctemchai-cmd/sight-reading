@@ -46,3 +46,19 @@ export function applyInputToTrial(
     },
   };
 }
+
+/**
+ * Closes a trial that was never answered. Playing in time means the music does
+ * not wait, so a note can end without a correct response — and without one
+ * there is no response time to record, which is why the field is nullable
+ * rather than filled with the length of the beat.
+ */
+export function missTrial(trial: OpenTrial, atMs: number): TrainingTrial {
+  return {
+    ...trial,
+    completedAtMs: atMs,
+    correctResponseMs: null,
+    firstAttemptMs: trial.attempts[0]?.responseMs ?? Math.max(0, atMs - trial.shownAtMs),
+    firstTryCorrect: false,
+  };
+}

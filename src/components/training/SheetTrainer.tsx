@@ -79,6 +79,7 @@ export function SheetTrainer() {
     midiSoundEnabled: false,
     computerKeyboardEnabled: true,
     nextNoteDelayMs: 0,
+    tempoBpm: 0,
   }), [clef, keySignature, melodicShape, range, rangePreset, totalNotes]);
 
   const finish = useCallback(async (completedTrials: TrainingTrial[]) => {

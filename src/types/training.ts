@@ -1,7 +1,7 @@
 import type { Clef, KeyName, MidiNumber, TargetNote, RangePreset } from "@/types/music";
 
 export type InputSource = "touch" | "computer-keyboard" | "midi";
-export type TrainingMode = "reflex" | "flash" | "sheet";
+export type TrainingMode = "reflex" | "flash" | "performance" | "sheet";
 export type SessionEndReason = "target-reached" | "user-stopped";
 /** How far the line is allowed to move between notes, in scale degrees. */
 export type MelodicShape = "steps" | "thirds" | "leaps" | "random";
@@ -32,7 +32,8 @@ export interface TrainingTrial {
   shownAtMs: number;
   attempts: TrainingAttempt[];
   completedAtMs: number;
-  correctResponseMs: number;
+  /** Null when the note went by unplayed: there was no correct response to time. */
+  correctResponseMs: number | null;
   firstAttemptMs: number;
   firstTryCorrect: boolean;
 }
@@ -51,6 +52,8 @@ export interface WeakNoteStat {
 
 export interface TrainingSummary {
   completedTargets: number;
+  /** Notes that passed unplayed. Only a tempo can leave one behind. */
+  missedCount: number;
   firstTryCorrectCount: number;
   accuracy: number;
   mistakeCount: number;
@@ -70,6 +73,8 @@ export interface TrainingSessionConfig {
   minMidi: number;
   maxMidi: number;
   sessionLength: number | "endless";
+  /** Beats per minute for the modes that keep time; ignored by the others. */
+  tempoBpm: number;
   adaptive: boolean;
   soundEnabled: boolean;
   midiSoundEnabled: boolean;

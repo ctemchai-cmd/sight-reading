@@ -6,7 +6,7 @@ const modes = [
   { href: "/train/flash", icon: Zap, title: "Flash", description: "One note, answered, gone. Pure recognition with nothing to read ahead to.", available: true },
   { href: "/train/reflex", icon: TimerReset, title: "Reflex", description: "A moving stream of notes. Trains the eye to run ahead of the hands.", available: true },
   { href: "/train/sheet", icon: Music, title: "Sheet Reading", description: "Read four measures ahead while the cursor tracks the expected note.", available: true },
-  { href: "#", icon: Focus, title: "Performance", description: "Continuous tempo-based reading without stopping.", available: false },
+  { href: "/train/performance", icon: Focus, title: "Performance", description: "A metronome sets the pace. Miss a note and the music carries on without you.", available: true },
 ];
 
 export default function TrainPage() {

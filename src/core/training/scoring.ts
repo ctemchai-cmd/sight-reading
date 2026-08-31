@@ -4,6 +4,11 @@ import type { TrainingSummary, TrainingTrial, WeakNoteStat } from "@/types/train
 /** How much of a session a note needs before its own score outranks its history. */
 const SESSION_CONFIDENCE_TRIALS = 3;
 
+/** Response times of the notes that were actually played. */
+function timings(trials: TrainingTrial[]): number[] {
+  return trials.map((trial) => trial.correctResponseMs).filter((ms): ms is number => ms !== null);
+}
+
 export function calculateWeakNoteStats(trials: TrainingTrial[]): WeakNoteStat[] {
   const grouped = new Map<number, TrainingTrial[]>();
   for (const trial of trials) {
@@ -12,11 +17,11 @@ export function calculateWeakNoteStats(trials: TrainingTrial[]): WeakNoteStat[] 
     grouped.set(trial.target.expectedMidi, group);
   }
 
-  const globalMedian = median(trials.map((trial) => trial.correctResponseMs)) ?? 1;
+  const globalMedian = median(timings(trials)) ?? 1;
 
   return [...grouped.entries()]
     .map(([midi, noteTrials]) => {
-      const responseTimes = noteTrials.map((trial) => trial.correctResponseMs);
+      const responseTimes = timings(noteTrials);
       const firstTryCorrectCount = noteTrials.filter((trial) => trial.firstTryCorrect).length;
       const incorrectAttemptCount = noteTrials.reduce(
         (sum, trial) => sum + trial.attempts.filter((attempt) => !attempt.correct).length,
@@ -35,7 +40,7 @@ export function calculateWeakNoteStats(trials: TrainingTrial[]): WeakNoteStat[] 
         firstTryAccuracy,
         averageResponseMs: average(responseTimes) ?? 0,
         medianResponseMs: noteMedian,
-        bestResponseMs: Math.min(...responseTimes),
+        bestResponseMs: responseTimes.length ? Math.min(...responseTimes) : 0,
         weakScore,
       };
     })
@@ -43,7 +48,7 @@ export function calculateWeakNoteStats(trials: TrainingTrial[]): WeakNoteStat[] 
 }
 
 export function summarizeTraining(trials: TrainingTrial[]): TrainingSummary {
-  const responseTimes = trials.map((trial) => trial.correctResponseMs);
+  const responseTimes = timings(trials);
   const firstTryCorrectCount = trials.filter((trial) => trial.firstTryCorrect).length;
   const mistakeCount = trials.reduce(
     (sum, trial) => sum + trial.attempts.filter((attempt) => !attempt.correct).length,
@@ -52,6 +57,7 @@ export function summarizeTraining(trials: TrainingTrial[]): TrainingSummary {
 
   return {
     completedTargets: trials.length,
+    missedCount: trials.filter((trial) => trial.correctResponseMs === null).length,
     firstTryCorrectCount,
     accuracy: trials.length === 0 ? 0 : firstTryCorrectCount / trials.length,
     mistakeCount,

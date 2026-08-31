@@ -13,7 +13,7 @@ import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
 import { formatClef, resolveRange } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
 import { calculateWeakNoteStats, mergeNoteStats, summarizeTraining } from "@/core/training/scoring";
-import { applyInputToTrial, createOpenTrial, type OpenTrial } from "@/core/training/session";
+import { applyInputToTrial, createOpenTrial, missTrial, type OpenTrial } from "@/core/training/session";
 import { computerKeyboardGuide, useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useAudio } from "@/hooks/useAudio";
 import { useFocusMode } from "@/hooks/useFocusMode";
@@ -38,6 +38,9 @@ type SaveStatus = "saving" | "pending" | "synced";
 // How far past the current note the stream stays generated, so the reader always
 // has something to look ahead to.
 const STREAM_LOOKAHEAD = 8;
+/** Beats of metronome before the first note, so the pulse is established first. */
+const COUNT_IN_BEATS = 4;
+const TEMPO_CHOICES = [40, 50, 60, 72, 84, 100, 120];
 
 const RANGE_LABELS: Record<RangePreset, string> = {
   staff: "Staff only",
@@ -49,8 +52,12 @@ const RANGE_LABELS: Record<RangePreset, string> = {
 
 
 interface NoteTrainerProps {
-  /** Both modes score identically; flash swaps the moving stream for one note at a time. */
-  mode: "reflex" | "flash";
+  /**
+   * All three score the same trials. Flash swaps the moving stream for one note
+   * at a time; performance takes the pacing away from the player and gives it
+   * to a metronome, so a note can go by unplayed.
+   */
+  mode: "reflex" | "flash" | "performance";
 }
 
 const DEFAULT_CONFIG: TrainingSessionConfig = {
@@ -67,6 +74,7 @@ const DEFAULT_CONFIG: TrainingSessionConfig = {
   midiSoundEnabled: false,
   computerKeyboardEnabled: true,
   nextNoteDelayMs: 150,
+  tempoBpm: 50,
 };
 
 export function NoteTrainer({ mode }: NoteTrainerProps) {
@@ -91,7 +99,14 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const { focusMode, setFocusMode, toggleFocusMode } = useFocusMode();
   const [keyChoice, setKeyChoice] = useState<KeyName | "random">("C");
   const [clefChoice, setClefChoice] = useState<Clef | "random">("treble");
-  const label = mode === "flash" ? "Flash" : "Reflex";
+  const label = mode === "flash" ? "Flash" : mode === "performance" ? "Performance" : "Reflex";
+  const timed = mode === "performance";
+  const [countIn, setCountIn] = useState(0);
+  const countInRef = useRef(0);
+  const beatAtRef = useRef(0);
+  const beatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The trial the player closed by hitting the note, held until the beat ends.
+  const hitRef = useRef<TrainingTrial | null>(null);
   const startedAtRef = useRef("");
   const armedRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,6 +145,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const finishSession = useCallback(async (completedTrials: TrainingTrial[], reason: "target-reached" | "user-stopped") => {
     if (completedTrials.length === 0) return;
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
     phaseRef.current = "complete";
     setPhase("complete");
     setFocusMode(false);
@@ -173,6 +189,59 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     extendStream(streamIndexRef.current);
   }, [extendStream]);
 
+  const armAt = useCallback((atMs: number) => {
+    const next = streamRef.current[streamIndexRef.current];
+    if (!next) return;
+    openTrialRef.current = createOpenTrial(next, trialsRef.current.length, atMs);
+    armedRef.current = true;
+    hitRef.current = null;
+    setFeedback(null);
+    setAttemptCount(0);
+  }, []);
+
+  /** Closes the beat with whatever the player managed, played or not. */
+  const closeBeat = useCallback((atMs: number): TrainingTrial[] => {
+    const open = openTrialRef.current;
+    const closed = hitRef.current ?? (open ? missTrial(open, atMs) : null);
+    if (!closed) return trialsRef.current;
+    const next = [...trialsRef.current, closed];
+    trialsRef.current = next;
+    setTrials(next);
+    return next;
+  }, []);
+
+  // A declaration rather than a const: each beat schedules the next one, which
+  // means naming itself.
+  function beat(): void {
+    if (phaseRef.current !== "running") return;
+    const now = performance.now();
+    const beatMs = 60000 / configRef.current.tempoBpm;
+
+    if (countInRef.current > 0) {
+      engine.current?.click(countInRef.current === COUNT_IN_BEATS);
+      countInRef.current -= 1;
+      setCountIn(countInRef.current);
+      if (countInRef.current === 0) armAt(now);
+    } else {
+      const completed = closeBeat(now);
+      const target = configRef.current.sessionLength;
+      if (target !== "endless" && completed.length >= target) {
+        void finishSession(completed, "target-reached");
+        return;
+      }
+      streamIndexRef.current += 1;
+      setStreamIndex(streamIndexRef.current);
+      extendStream(streamIndexRef.current);
+      engine.current?.click(false);
+      armAt(now);
+    }
+
+    // Scheduled against the beat it should have landed on, not against now, so
+    // the pulse does not drift over a long session.
+    beatAtRef.current += beatMs;
+    beatTimerRef.current = setTimeout(beat, Math.max(0, beatAtRef.current - performance.now()));
+  }
+
   const handleInput = (input: NoteInputEvent) => {
     const currentConfig = configRef.current;
     if (currentConfig.soundEnabled && (input.source !== "midi" || currentConfig.midiSoundEnabled)) {
@@ -190,6 +259,11 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
 
     armedRef.current = false;
     setFeedback("correct");
+    if (timed) {
+      // Played in time. The beat will close the trial and move on regardless.
+      hitRef.current = result.completed;
+      return;
+    }
     const completedTrials = [...trialsRef.current, result.completed];
     trialsRef.current = completedTrials;
     setTrials(completedTrials);
@@ -204,7 +278,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   useMidi(handleInput, (midiNote) => engine.current?.noteOff(midiNote));
   useComputerKeyboard(config.computerKeyboardEnabled, handleInput, (midiNote) => engine.current?.noteOff(midiNote));
 
-  const startSession = useCallback(async (focusMidis?: number[]) => {
+  async function startSession(focusMidis?: number[]): Promise<void> {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (configRef.current.soundEnabled) await initializeAudio();
     // Resolve a random choice now, so the session records the key it landed on.
@@ -240,19 +314,29 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     phaseRef.current = "running";
     setPhase("running");
     extendStream(0);
-  }, [clefChoice, extendStream, initializeAudio, keyChoice]);
+
+    if (timed) {
+      hitRef.current = null;
+      countInRef.current = COUNT_IN_BEATS;
+      setCountIn(COUNT_IN_BEATS);
+      beatAtRef.current = performance.now();
+      beat();
+    }
+  }
 
   const markTargetReady = useCallback(() => {
-    if (phaseRef.current !== "running" || !target || openTrialRef.current?.target.id === target.id) return;
+    // A timed session arms on the beat, not when the staff finishes painting.
+    if (timed || phaseRef.current !== "running" || !target || openTrialRef.current?.target.id === target.id) return;
     openTrialRef.current = createOpenTrial(target, trialsRef.current.length, performance.now());
     armedRef.current = true;
-  }, [target]);
+  }, [target, timed]);
 
   const pause = () => {
     phaseRef.current = "paused";
     setPhase("paused");
     armedRef.current = false;
     openTrialRef.current = null;
+    if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
     engine.current?.stopAll();
   };
 
@@ -261,6 +345,15 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     setPhase("running");
     setFeedback(null);
     if (!target) return;
+    if (timed) {
+      // Counted back in, so the pulse is re-established before the music resumes.
+      hitRef.current = null;
+      countInRef.current = COUNT_IN_BEATS;
+      setCountIn(COUNT_IN_BEATS);
+      beatAtRef.current = performance.now();
+      beat();
+      return;
+    }
     // The stream does not repaint on resume, so re-arm here and time the note from
     // the moment the reader is looking at it again.
     openTrialRef.current = createOpenTrial(target, trialsRef.current.length, performance.now());
@@ -269,6 +362,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
 
   useEffect(() => () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
   }, []);
 
   if (phase === "configure") {
@@ -341,6 +435,24 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
               ))}
             </select>
           </label>
+          {timed && (
+            <label className="space-y-2 text-sm text-slate-300">
+              <span>Tempo</span>
+              <select
+                value={config.tempoBpm}
+                onChange={(event) =>
+                  setConfig((current) => ({ ...current, tempoBpm: Number(event.target.value) }))
+                }
+                className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
+              >
+                {TEMPO_CHOICES.map((bpm) => (
+                  <option key={bpm} value={bpm}>
+                    {bpm} BPM · one note every {(60 / bpm).toFixed(1)}s
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="space-y-2 text-sm text-slate-300">
             <span>Session length</span>
             <select
@@ -394,7 +506,10 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
         <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-900/70 p-2 text-center text-xs text-slate-300 sm:flex sm:items-center sm:gap-6 sm:bg-transparent sm:p-0 sm:text-sm">
           <span><span className="block text-slate-500 sm:inline">Notes </span>{trials.length} / {config.sessionLength === "endless" ? "∞" : config.sessionLength}</span>
           <span><span className="block text-slate-500 sm:inline">First try </span>{trials.length ? Math.round((trials.filter((trial) => trial.firstTryCorrect).length / trials.length) * 100) : 100}%</span>
-          <span><span className="block text-slate-500 sm:inline">Attempts </span>{attemptCount || 1}</span>
+          <span>
+            <span className="block text-slate-500 sm:inline">{timed ? "Missed " : "Attempts "}</span>
+            {timed ? trials.filter((trial) => trial.correctResponseMs === null).length : attemptCount || 1}
+          </span>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="ghost" onClick={toggleFocusMode}><Maximize2 className="size-4" /> Focus</Button>
@@ -406,6 +521,11 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       )}
 
       <Card className="note-training-staff relative p-3 sm:p-5">
+        {countIn > 0 && (
+          <div className="absolute inset-0 z-30 grid place-items-center rounded-2xl bg-slate-950/80">
+            <p className="text-6xl font-bold text-teal-300">{countIn}</p>
+          </div>
+        )}
         {phase === "paused" && <div className="absolute inset-0 z-20 grid place-items-center rounded-2xl bg-slate-950/90"><Button onClick={resume}><Play className="size-4" /> Resume session</Button></div>}
         {stream.length > 0 && (
           <MusicStaff

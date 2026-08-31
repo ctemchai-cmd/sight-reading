@@ -70,11 +70,23 @@ function loadSampler(): Promise<Tone.Sampler> {
   });
 }
 
+/** A short, dry tick — a piano note would be mistaken for part of the exercise. */
+function createClick(): Tone.MembraneSynth {
+  const click = new Tone.MembraneSynth({
+    pitchDecay: 0.008,
+    octaves: 2,
+    envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.02 },
+  }).toDestination();
+  click.volume.value = -16;
+  return click;
+}
+
 type Instrument = Tone.Sampler | Tone.PolySynth<Tone.MonoSynth>;
 
 export class ToneAudioEngine implements AudioEngine {
   private instrument: Instrument | null = null;
   private loading: Promise<Instrument> | null = null;
+  private metronome: Tone.MembraneSynth | null = null;
 
   /**
    * Fetching and decoding the samples needs no user gesture — only starting the
@@ -125,6 +137,12 @@ export class ToneAudioEngine implements AudioEngine {
       undefined,
       ToneAudioEngine.gain(velocity),
     );
+  }
+
+  /** The beat, for the modes that keep one. Accented on the first of the bar. */
+  click(accented = false): void {
+    this.metronome ??= createClick();
+    this.metronome.triggerAttackRelease(accented ? "C4" : "G3", 0.02, undefined, accented ? 1 : 0.6);
   }
 
   setVolume(decibels: number): void {
