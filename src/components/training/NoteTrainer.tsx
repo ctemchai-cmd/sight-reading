@@ -289,11 +289,26 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     beatTimerRef.current = setTimeout(beat, Math.max(0, beatAtRef.current - performance.now()));
   }
 
+  function synchronizePerformanceClock(atMs: number): void {
+    if (!timed || phaseRef.current !== "running") return;
+    // Input can arrive after the visible cursor has crossed a deadline but
+    // before the corresponding timer task runs. Advance the hot refs first so
+    // that note is judged against the beat the player can actually see.
+    let catchUpCount = 0;
+    while (atMs >= beatAtRef.current && phaseRef.current === "running" && catchUpCount < 32) {
+      if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
+      beatTimerRef.current = null;
+      beat();
+      catchUpCount += 1;
+    }
+  }
+
   const handleInput = (input: NoteInputEvent) => {
     const currentConfig = configRef.current;
     if (currentConfig.soundEnabled && (input.source !== "midi" || currentConfig.midiSoundEnabled)) {
       engine.current?.noteOn(input.midi, input.velocity ?? 96);
     }
+    synchronizePerformanceClock(input.occurredAtMs);
     if (phaseRef.current !== "running" || !armedRef.current || !openTrialRef.current) return;
 
     const result = applyInputToTrial(openTrialRef.current, input);
