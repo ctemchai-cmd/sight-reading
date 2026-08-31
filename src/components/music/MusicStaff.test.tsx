@@ -28,7 +28,10 @@ beforeAll(() => {
 });
 
 describe("MusicStaff Performance cursor", () => {
-  it("travels toward the following note for exactly one beat", async () => {
+  it("catches its animation up to the metronome timestamp", async () => {
+    const animate = vi.fn();
+    animate.mockReturnValue({ cancel: vi.fn() } as unknown as Animation);
+    Element.prototype.animate = animate as unknown as typeof Element.prototype.animate;
     const notes: TargetNote[] = [60, 62, 64, 65].map((midi, index) => ({
       id: `note-${midi}`,
       expectedMidi: midi,
@@ -46,12 +49,15 @@ describe("MusicStaff Performance cursor", () => {
         beatCursor
         beatCursorRunning
         beatDurationMs={1_000}
+        beatStartedAtMs={performance.now() - 250}
       />,
     );
 
-    await waitFor(() => expect(container.querySelector(".sheet-beat-cursor-moving")).not.toBeNull());
-    const cursor = container.querySelector<HTMLElement>(".sheet-beat-cursor-moving");
-    expect(cursor?.style.animationDuration).toBe("1000ms");
-    expect(cursor?.style.getPropertyValue("--cursor-travel-x")).not.toBe("0px");
+    await waitFor(() => expect(container.querySelector(".sheet-beat-cursor")).not.toBeNull());
+    await waitFor(() => expect(animate).toHaveBeenCalled());
+    const calls = animate.mock.calls as unknown as Array<[Keyframe[], KeyframeAnimationOptions]>;
+    const options = calls.at(-1)![1];
+    expect(options.duration).toBe(1_000);
+    expect(Number(options.delay)).toBeLessThanOrEqual(-250);
   });
 });

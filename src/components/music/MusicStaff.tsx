@@ -51,6 +51,7 @@ interface MusicStaffProps {
   beatCursor?: boolean;
   beatCursorRunning?: boolean;
   beatDurationMs?: number;
+  beatStartedAtMs?: number;
   onReady?: () => void;
   /** Stream only: take the container's height and scale the notation to match. */
   fill?: boolean;
@@ -69,12 +70,6 @@ interface CursorGeometry {
   top: number;
   width: number;
   height: number;
-}
-
-interface SheetCursorPath {
-  index: number;
-  current: CursorGeometry;
-  next: CursorGeometry | null;
 }
 
 /**
@@ -122,6 +117,7 @@ export function MusicStaff({
   beatCursor = false,
   beatCursorRunning = false,
   beatDurationMs = 0,
+  beatStartedAtMs = 0,
   onReady,
   fill = false,
   className,
@@ -130,6 +126,7 @@ export function MusicStaff({
   const staffLayerRef = useRef<HTMLDivElement>(null);
   const streamLayerRef = useRef<HTMLDivElement>(null);
   const sheetLayerRef = useRef<HTMLDivElement>(null);
+  const sheetCursorRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef(onReady);
   const drawnIndexRef = useRef(-1);
   const slideRef = useRef<Animation | null>(null);
@@ -141,7 +138,7 @@ export function MusicStaff({
   const [headCenterX, setHeadCenterX] = useState<number | null>(null);
   // Where notes may start: past the clef and whatever the key signature draws.
   const [noteStartX, setNoteStartX] = useState(0);
-  const [sheetCursor, setSheetCursor] = useState<SheetCursorPath | null>(null);
+  const [sheetCursorPositions, setSheetCursorPositions] = useState<CursorGeometry[]>([]);
 
   const streaming = mode === "stream" || mode === "flash";
   const geometry = useMemo(() => streamGeometry(width, mode === "flash", noteStartX), [mode, noteStartX, width]);
@@ -154,6 +151,8 @@ export function MusicStaff({
   // ledger directions get equal room.
   const innerWidth = width / scale;
   const staveY = Math.round((staffHeight / scale - STAVE_LINES_PX) / 2) - SPACE_ABOVE_STAVE_PX;
+  const sheetRenderIndex = beatCursor ? -1 : currentIndex;
+  const sheetRenderFeedback = beatCursor ? null : feedback;
 
   useEffect(() => {
     readyRef.current = onReady;
@@ -292,8 +291,7 @@ export function MusicStaff({
       return stave.setContext(context);
     });
     const prefixes = staves.map((stave) => stave.getNoteStartX() - stave.getX());
-    let currentCursor: CursorGeometry | null = null;
-    let followingCursor: CursorGeometry | null = null;
+    const cursorPositions: CursorGeometry[] = [];
 
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
       const firstInRow = rowIndex * measuresPerRow;
@@ -313,13 +311,13 @@ export function MusicStaff({
         const vexNotes = targets.map((target, localIndex) => {
           const index = start + localIndex;
           const color =
-            index === currentIndex
-              ? feedback === "incorrect"
+            index === sheetRenderIndex
+              ? sheetRenderFeedback === "incorrect"
                 ? INCORRECT
-                : feedback === "correct" || !beatCursor
+                : sheetRenderFeedback === "correct"
                   ? CORRECT
                   : INK
-              : index < currentIndex
+              : index < sheetRenderIndex
                 ? SHEET_PLAYED
                 : INK;
           return createVexNote(target, color, keySignature, clef);
@@ -328,31 +326,30 @@ export function MusicStaff({
         new Formatter().joinVoices([voice]).format([voice], Math.max(60, noteSpace - 14));
         voice.draw(context, stave);
         if (beatCursor) {
-          for (const index of [currentIndex, currentIndex + 1]) {
-            if (index < start || index >= start + targets.length) continue;
-            const note = vexNotes[index - start];
+          for (let localIndex = 0; localIndex < vexNotes.length; localIndex += 1) {
+            const index = start + localIndex;
+            const note = vexNotes[localIndex];
             const cursorWidth = Math.min(42, Math.max(24, noteSpace * 0.18));
             const top = stave.getYForLine(0) - 16;
-            const geometry = {
+            cursorPositions[index] = {
               left: (note.getAbsoluteX() + note.getGlyphWidth() / 2 - cursorWidth / 2) * scale,
               top: top * scale,
               width: cursorWidth * scale,
               height: (stave.getYForLine(4) - top + 16) * scale,
             };
-            if (index === currentIndex) currentCursor = geometry;
-            else followingCursor = geometry;
           }
         }
         x += prefixes[measureIndex] + noteSpace;
       }
     }
 
-    setSheetCursor(currentCursor ? { index: currentIndex, current: currentCursor, next: followingCursor } : null);
+    setSheetCursorPositions(cursorPositions);
 
-    // Several systems will not fit at once, so keep the cursor's line in view.
+    // Several systems will not fit at once, so keep Sheet Reading's current
+    // line in view. Performance owns a separate lightweight cursor below.
     const view = containerRef.current;
-    if (view) {
-      const rowTop = (topOffset + Math.floor(Math.floor(currentIndex / 4) / measuresPerRow) * rowHeight) * scale;
+    if (view && !beatCursor) {
+      const rowTop = (topOffset + Math.floor(Math.floor(sheetRenderIndex / 4) / measuresPerRow) * rowHeight) * scale;
       const rowBottom = rowTop + rowHeight * scale;
       if (rowTop < view.scrollTop) view.scrollTop = Math.max(0, rowTop - 6);
       else if (rowBottom > view.scrollTop + view.clientHeight) {
@@ -362,7 +359,42 @@ export function MusicStaff({
 
     const frame = requestAnimationFrame(() => readyRef.current?.());
     return () => cancelAnimationFrame(frame);
-  }, [beatCursor, clef, compactLandscape, currentIndex, feedback, fill, keySignature, mode, notes, width]);
+  }, [beatCursor, clef, compactLandscape, fill, keySignature, mode, notes, sheetRenderFeedback, sheetRenderIndex, width]);
+
+  const sheetCursor = sheetCursorPositions[currentIndex] ?? null;
+  const nextSheetCursor = sheetCursorPositions[currentIndex + 1] ?? null;
+
+  useEffect(() => {
+    const cursor = sheetCursorRef.current;
+    if (!cursor || !sheetCursor || !nextSheetCursor || !beatCursorRunning || beatDurationMs <= 0) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const elapsedMs = beatStartedAtMs > 0 ? Math.max(0, performance.now() - beatStartedAtMs) : 0;
+    const animation = cursor.animate(
+      [
+        { transform: "translate(0px, 0px)" },
+        {
+          transform: `translate(${nextSheetCursor.left - sheetCursor.left}px, ${nextSheetCursor.top - sheetCursor.top}px)`,
+        },
+      ],
+      {
+        duration: beatDurationMs,
+        delay: -Math.min(elapsedMs, beatDurationMs),
+        easing: "linear",
+        fill: "forwards",
+      },
+    );
+    return () => animation.cancel();
+  }, [beatCursorRunning, beatDurationMs, beatStartedAtMs, nextSheetCursor, sheetCursor]);
+
+  useEffect(() => {
+    if (!beatCursor || !sheetCursor) return;
+    const view = containerRef.current;
+    if (!view) return;
+    const rowTop = Math.max(0, sheetCursor.top - 18);
+    const rowBottom = sheetCursor.top + sheetCursor.height + 18;
+    if (rowTop < view.scrollTop) view.scrollTop = rowTop;
+    else if (rowBottom > view.scrollTop + view.clientHeight) view.scrollTop = rowBottom - view.clientHeight;
+  }, [beatCursor, currentIndex, sheetCursor]);
 
   return (
     <div
@@ -396,19 +428,16 @@ export function MusicStaff({
         </>
       ) : (
         <div className="relative">
-          {beatCursor && sheetCursor?.index === currentIndex && (
+          {beatCursor && sheetCursor && (
             <div
-              key={`${currentIndex}-${Math.round(sheetCursor.current.left)}-${beatCursorRunning}`}
-              className={`sheet-beat-cursor ${beatCursorRunning && sheetCursor.next ? "sheet-beat-cursor-moving" : ""}`}
+              ref={sheetCursorRef}
+              className="sheet-beat-cursor"
               style={{
-                left: sheetCursor.current.left,
-                top: sheetCursor.current.top,
-                width: sheetCursor.current.width,
-                height: sheetCursor.current.height,
-                animationDuration: `${beatDurationMs}ms`,
-                "--cursor-travel-x": `${(sheetCursor.next?.left ?? sheetCursor.current.left) - sheetCursor.current.left}px`,
-                "--cursor-travel-y": `${(sheetCursor.next?.top ?? sheetCursor.current.top) - sheetCursor.current.top}px`,
-              } as CSSProperties}
+                left: sheetCursor.left,
+                top: sheetCursor.top,
+                width: sheetCursor.width,
+                height: sheetCursor.height,
+              }}
               aria-hidden="true"
             />
           )}

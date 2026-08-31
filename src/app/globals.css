@@ -106,24 +106,6 @@ textarea,
   pointer-events: none;
 }
 
-.sheet-beat-cursor-moving {
-  animation-name: sheet-beat-cursor-travel;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-}
-
-@keyframes sheet-beat-cursor-travel {
-  to {
-    transform: translate(var(--cursor-travel-x), var(--cursor-travel-y));
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sheet-beat-cursor-moving {
-    animation: none;
-  }
-}
-
 /* Focus mode gives the whole viewport to the staff and keyboard. The MIDI menu
    goes with the header, but the connection is held by the provider and survives;
    Exit Focus in the training toolbar brings the menu back. */
@@ -204,6 +186,25 @@ html[data-focus-mode="true"] .app-nav {
   margin: 0;
   overflow: hidden;
   clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Performance grades are part of the timed exercise, not explanatory chrome.
+   Keep them visible over the notation while the rest of Focus feedback stays
+   available only to assistive technology. */
+.focus-training-surface .performance-training-feedback {
+  position: absolute;
+  z-index: 35;
+  right: 0.75rem;
+  bottom: 0.5rem;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  border-radius: 0.5rem;
+  background: rgb(2 6 23 / 0.8);
+  padding: 0.2rem 0.55rem;
   white-space: nowrap;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { Maximize2, Pause, Play, RotateCcw, Square } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MusicStaff } from "@/components/music/MusicStaff";
 import { PianoKeyboard } from "@/components/music/PianoKeyboard";
 import { FocusSurface } from "@/components/training/FocusSurface";
@@ -12,7 +12,7 @@ import { KEY_NAMES, describeKey, formatKeyName, randomKey } from "@/core/music/k
 import { MELODIC_SHAPES, SHAPE_LABELS } from "@/core/training/melody";
 import { formatClef, resolveRange } from "@/core/music/notes";
 import { NoteGenerator } from "@/core/training/noteGenerator";
-import { getPerformancePage, gradePerformanceTiming, performancePageLastIndex } from "@/core/training/performance";
+import { PERFORMANCE_NOTES_PER_LINE, gradePerformanceTiming, performancePageLastIndex } from "@/core/training/performance";
 import { calculateWeakNoteStats, mergeNoteStats, summarizeTraining } from "@/core/training/scoring";
 import { applyInputToTrial, createOpenTrial, missTrial, type OpenTrial } from "@/core/training/session";
 import { computerKeyboardGuide, useComputerKeyboard } from "@/hooks/useComputerKeyboard";
@@ -119,6 +119,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const label = mode === "flash" ? "Flash" : mode === "performance" ? "Performance" : "Reflex";
   const timed = mode === "performance";
   const [countIn, setCountIn] = useState(0);
+  const [beatStartedAtMs, setBeatStartedAtMs] = useState(0);
   const countInRef = useRef(0);
   const beatAtRef = useRef(0);
   const beatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -129,6 +130,18 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { engine, error: audioError, initialize: initializeAudio } = useAudio();
   const target = stream[streamIndex] ?? null;
+  const performancePageStart = timed
+    ? Math.floor(streamIndex / PERFORMANCE_NOTES_PER_LINE) * PERFORMANCE_NOTES_PER_LINE
+    : 0;
+  // Keep this array stable while the cursor crosses a system. Re-slicing on
+  // every grade/beat render made VexFlow redraw the score and delayed motion.
+  const visibleNotes = useMemo(
+    () => timed
+      ? stream.slice(performancePageStart, performancePageStart + PERFORMANCE_NOTES_PER_LINE)
+      : stream,
+    [performancePageStart, stream, timed],
+  );
+  const visibleIndex = timed ? streamIndex - performancePageStart : streamIndex;
 
   useEffect(() => {
     configRef.current = config;
@@ -220,9 +233,10 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     openTrialRef.current = createOpenTrial(next, trialsRef.current.length, atMs);
     armedRef.current = true;
     hitRef.current = null;
+    if (timed) setBeatStartedAtMs(atMs);
     setFeedback(null);
     setAttemptCount(0);
-  }, []);
+  }, [timed]);
 
   /** Closes the beat with whatever the player managed, played or not. */
   const closeBeat = useCallback((atMs: number): TrainingTrial[] => {
@@ -344,6 +358,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     setSummary(null);
     setFeedback(null);
     setTimingGrade(null);
+    setBeatStartedAtMs(0);
     setAttemptCount(0);
     openTrialRef.current = null;
     armedRef.current = false;
@@ -540,10 +555,6 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     return <div className="px-4 py-8 sm:px-6 sm:py-10"><SessionResult summary={summary} syncStatus={saveStatus} onRetry={() => { phaseRef.current = "configure"; setPhase("configure"); }} onPracticeWeak={() => void startSession(summary.weakNotes.slice(0, 5).map((note) => note.midi))} /></div>;
   }
 
-  const performancePage = timed ? getPerformancePage(stream, streamIndex) : null;
-  const visibleNotes = performancePage?.notes ?? stream;
-  const visibleIndex = performancePage?.currentIndex ?? streamIndex;
-
   return (
     <FocusSurface
       active={focusMode}
@@ -591,11 +602,12 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
             beatCursor={timed}
             beatCursorRunning={timed && phase === "running" && countIn === 0}
             beatDurationMs={timed ? 60000 / config.tempoBpm : undefined}
+            beatStartedAtMs={timed ? beatStartedAtMs : undefined}
             fill={focusMode}
             onReady={markTargetReady}
           />
         )}
-        <div className="training-feedback mt-3 h-6 text-center text-sm font-semibold" aria-live="polite">
+        <div className={`training-feedback mt-3 h-6 text-center text-sm font-semibold ${timed ? "performance-training-feedback" : ""}`} aria-live="polite">
           {feedback === "incorrect" && <span className="text-rose-300">✕ Wrong note</span>}
           {feedback !== "incorrect" && timed && timingGrade && (
             <span className={TIMING_GRADE_COLORS[timingGrade]}>{TIMING_GRADE_LABELS[timingGrade]}</span>
