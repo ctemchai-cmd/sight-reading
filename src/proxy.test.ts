@@ -46,6 +46,16 @@ describe("private route proxy", () => {
     expect(location.searchParams.get("next")).toBe("/dashboard");
   });
 
+  it("keeps Free Play private", async () => {
+    configureSupabaseClaims();
+
+    const response = await proxy(new NextRequest("https://trainer.example/play"));
+    const location = new URL(response.headers.get("location")!);
+
+    expect(location.pathname).toBe("/login");
+    expect(location.searchParams.get("next")).toBe("/play");
+  });
+
   it("allows a non-anonymous Supabase user and redirects them away from login", async () => {
     configureSupabaseClaims({ sub: "user-1", email: "user@example.com", is_anonymous: false });
 

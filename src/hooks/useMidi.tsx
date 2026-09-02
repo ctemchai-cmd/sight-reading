@@ -31,6 +31,7 @@ interface MidiController {
   registerHandlers: (
     onNoteOn: (event: NoteInputEvent) => void,
     onNoteOff?: (midi: number) => void,
+    onSustain?: (down: boolean) => void,
   ) => () => void;
 }
 
@@ -44,6 +45,7 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   const selectedDeviceIdRef = useRef("");
   const noteOnRef = useRef<((event: NoteInputEvent) => void) | null>(null);
   const noteOffRef = useRef<((midi: number) => void) | null>(null);
+  const sustainRef = useRef<((down: boolean) => void) | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -65,6 +67,10 @@ export function MidiProvider({ children }: { children: ReactNode }) {
       if (!event.data) return;
       const message = parseMidiMessage(event.data, event.timeStamp);
       if (!message) return;
+      if (message.kind === "sustain") {
+        sustainRef.current?.(message.down);
+        return;
+      }
       if (message.kind === "note-off") {
         noteOffRef.current?.(message.midi);
         return;
@@ -126,12 +132,15 @@ export function MidiProvider({ children }: { children: ReactNode }) {
   const registerHandlers = useCallback((
     onNoteOn: (event: NoteInputEvent) => void,
     onNoteOff?: (midi: number) => void,
+    onSustain?: (down: boolean) => void,
   ) => {
     noteOnRef.current = onNoteOn;
     noteOffRef.current = onNoteOff ?? null;
+    sustainRef.current = onSustain ?? null;
     return () => {
       if (noteOnRef.current === onNoteOn) noteOnRef.current = null;
       if (noteOffRef.current === onNoteOff) noteOffRef.current = null;
+      if (sustainRef.current === onSustain) sustainRef.current = null;
     };
   }, []);
 
@@ -161,12 +170,16 @@ function useMidiContext(): MidiController {
   return context;
 }
 
-export function useMidi(onNoteOn: (event: NoteInputEvent) => void, onNoteOff?: (midi: number) => void) {
+export function useMidi(
+  onNoteOn: (event: NoteInputEvent) => void,
+  onNoteOff?: (midi: number) => void,
+  onSustain?: (down: boolean) => void,
+) {
   const controller = useMidiContext();
 
   useEffect(
-    () => controller.registerHandlers(onNoteOn, onNoteOff),
-    [controller, onNoteOff, onNoteOn],
+    () => controller.registerHandlers(onNoteOn, onNoteOff, onSustain),
+    [controller, onNoteOff, onNoteOn, onSustain],
   );
 
   return controller;

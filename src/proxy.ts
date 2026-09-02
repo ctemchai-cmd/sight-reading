@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 // The coach page is gated here; /api/coach gates itself, because a redirect to
 // /login is something fetch follows silently and hands back as 200 HTML.
-const protectedRoutePrefixes = ["/train", "/dashboard", "/settings", "/coach"];
+const protectedRoutePrefixes = ["/train", "/dashboard", "/settings", "/coach", "/play"];
 
 function isProtectedPath(pathname: string): boolean {
   return protectedRoutePrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

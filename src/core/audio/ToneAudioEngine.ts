@@ -89,6 +89,9 @@ export class ToneAudioEngine implements AudioEngine {
   private loading: Promise<Instrument> | null = null;
   private metronome: Tone.MembraneSynth | null = null;
   private heldNoteTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  private sustaining = false;
+  /** Keys let go while the pedal is down. They ring until it comes up. */
+  private sustained = new Set<number>();
 
   /**
    * Fetching and decoding the samples needs no user gesture — only starting the
@@ -124,8 +127,19 @@ export class ToneAudioEngine implements AudioEngine {
     return Tone.Frequency(midi, "midi").toNote();
   }
 
+  /** Silences the pitch whatever the pedal is doing. */
+  private release(midi: number): void {
+    const timer = this.heldNoteTimers.get(midi);
+    if (timer) clearTimeout(timer);
+    this.heldNoteTimers.delete(midi);
+    this.sustained.delete(midi);
+    this.instrument?.triggerRelease(ToneAudioEngine.note(midi));
+  }
+
   noteOn(midi: number, velocity = 96): void {
-    this.noteOff(midi);
+    // Re-striking a pitch has to take its old voice with it even under the
+    // pedal, or repeated notes stack into one another until they distort.
+    this.release(midi);
     this.instrument?.triggerAttack(ToneAudioEngine.note(midi), undefined, ToneAudioEngine.gain(velocity));
     this.heldNoteTimers.set(midi, setTimeout(() => this.noteOff(midi), MAX_HELD_NOTE_MS));
   }
@@ -134,7 +148,21 @@ export class ToneAudioEngine implements AudioEngine {
     const timer = this.heldNoteTimers.get(midi);
     if (timer) clearTimeout(timer);
     this.heldNoteTimers.delete(midi);
+    // The pedal lifts the dampers: the key is up but the string is not stopped.
+    // The recording still ends when it ends, so this cannot ring longer than a
+    // sample does — about two and a half seconds, where a piano rings for ten.
+    if (this.sustaining) {
+      this.sustained.add(midi);
+      return;
+    }
     this.instrument?.triggerRelease(ToneAudioEngine.note(midi));
+  }
+
+  setSustain(down: boolean): void {
+    this.sustaining = down;
+    if (down) return;
+    for (const midi of this.sustained) this.instrument?.triggerRelease(ToneAudioEngine.note(midi));
+    this.sustained.clear();
   }
 
   playNote(midi: number, velocity = 96, durationSeconds = NOTE_SECONDS): void {
@@ -159,6 +187,8 @@ export class ToneAudioEngine implements AudioEngine {
   stopAll(): void {
     for (const timer of this.heldNoteTimers.values()) clearTimeout(timer);
     this.heldNoteTimers.clear();
+    this.sustained.clear();
+    this.sustaining = false;
     this.instrument?.releaseAll();
     this.metronome?.triggerRelease();
   }

@@ -13,3 +13,13 @@ export interface MidiNoteMessage {
   channel: number;
   occurredAtMs: number;
 }
+
+/** The damper pedal. Continuous pedals report a position; MIDI calls half of it down. */
+export interface MidiSustainMessage {
+  kind: "sustain";
+  down: boolean;
+  channel: number;
+  occurredAtMs: number;
+}
+
+export type MidiMessage = MidiNoteMessage | MidiSustainMessage;

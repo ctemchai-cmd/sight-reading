@@ -45,3 +45,9 @@ test("gates the coach page and refuses its API without a session", async ({ page
   expect(response.status()).toBe(401);
   expect(response.headers()["content-type"]).toContain("application/json");
 });
+
+test("keeps Free Play behind private access", async ({ page }) => {
+  await page.goto("/play");
+  await expect(page).toHaveURL(/\/login/);
+  expect(new URL(page.url()).searchParams.get("next")).toBe("/play");
+});

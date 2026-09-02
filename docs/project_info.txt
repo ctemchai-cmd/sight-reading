@@ -1,6 +1,6 @@
 # Project Specification — Sight Reading Trainer
 
-## Current V1 Implementation Decisions (Updated 2026-09-01)
+## Current V1 Implementation Decisions (Updated 2026-09-03)
 
 These decisions override older or broader statements elsewhere in this document where they conflict.
 
@@ -14,6 +14,8 @@ These decisions override older or broader statements elsewhere in this document 
 * Responsive mobile layout includes compact navigation, stacked cards and controls, reflowed sheet-music measures, responsive dashboard charts, and a wrapped pitch heatmap. Chrome Desktop + USB MIDI remains the formally supported training path.
 * Mobile landscape at 800 × 360 is an explicit layout acceptance target: training uses a full-width vertical stack with notation on top and the virtual piano below. Sheet Reading uses a single four-measure row whenever space permits.
 * MIDI permission, status, and device selection live in a persistent top-navigation menu rather than inside the training canvas. The MIDI connection survives client-side navigation between training modes.
+* Private Free Play lives at `/play`: it is an unscored, unrecorded piano for virtual, computer-keyboard, and MIDI input, with an explicit audio start, sound toggle, recent-note names, held-key count, pedal state, and Focus Mode. It deliberately does not create training sessions or affect Progress.
+* Free Play accepts the standard MIDI sustain controller CC64 on every channel; values 64–127 mean pedal down and 0–63 mean pedal up. Releasing a key while the pedal is down defers its note-off until the pedal rises. Re-striking that pitch releases its previous voice first, and leaving the page stops every voice. The bundled samples last about two and a half seconds, so pedal support can defer release but cannot extend a recording beyond its source audio.
 * Focus Mode is available in every training mode. It hides the application header outright, MIDI menu included, and the training toolbar with it, so only the notation and the virtual piano remain. This reverses the earlier decision to keep a compact header for MIDI access: the connection is owned by the layout-level provider and survives, and leaving focus brings the menu, the session counters, and pause back.
 * The only control inside Focus Mode is a small icon-only Exit Focus button overlaying the top-right of the notation, positioned so it costs no layout space. Correct and incorrect verdicts stay legible through note colour, and the verdict text is kept for screen readers only.
 * Reflex notation scales up to fill the height Focus Mode frees, to a ceiling beyond which it reads as stretched against the unchanged horizontal spacing. Leftover height goes to the virtual piano. Sheet Reading keeps its natural notation size for now.
@@ -30,8 +32,8 @@ These decisions override older or broader statements elsewhere in this document 
 * Flash and Reflex are the two self-paced single-target modes and score identically; only the presentation differs. Flash shows one centred note that is replaced the moment it is answered. Reflex presents a continuous note stream rather than one note swapped in place. Reading runs left to right, so notes travel right to left: upcoming notes enter at the right edge, the armed note sits under a fixed playhead about a quarter of the way across the staff, and answered notes fade out past the clef. Four to six notes stay visible ahead depending on staff width. The clef and staff lines never move.
 * Reflex and Flash are self-paced: they advance only on a correct input, never on a clock.
 * Bluetooth devices are supported when the operating system exposes them to Chrome as a Web MIDI input. V1 will not implement a separate Web Bluetooth/BLE-MIDI protocol stack.
-* V1 remains a complete product slice: Flash, Reflex, Sheet Reading, Performance, virtual piano, computer keyboard, MIDI, audio, adaptive practice, private Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
-* V1 is a private application. `/train`, `/dashboard`, and `/settings` require a valid non-anonymous Supabase session. Access is granted or revoked by creating or deleting users in the Supabase dashboard; no separate application allowlist is required.
+* V1 remains a complete product slice: Flash, Reflex, Sheet Reading, Performance, unscored Free Play, virtual piano, computer keyboard, MIDI, audio, adaptive practice, private Supabase Auth/history, dashboard, settings, and an installable desktop PWA.
+* V1 is a private application. `/train`, `/play`, `/dashboard`, `/coach`, and `/settings` require a valid non-anonymous Supabase session. Access is granted or revoked by creating or deleting users in the Supabase dashboard; no separate application allowlist is required.
 * Public sign-up and guest training are disabled. The application does not expose a `/signup` route. Approved accounts are created manually by the owner in Supabase, and public user registration must be disabled in Supabase Authentication settings.
 * The application fails closed if Supabase public configuration is absent or the request has no valid authenticated session. The landing page, login page, and authentication callback remain public.
 * IndexedDB is used only as a pending cloud-save queue if authentication or Supabase connectivity is interrupted after a private training session has already started. It is not a guest-history store.
@@ -45,7 +47,7 @@ These decisions override older or broader statements elsewhere in this document 
 * Tone's default 100 ms scheduling lookahead is switched off. Nothing in this application is sequenced — every note is triggered live by a key press — so that budget is only input lag.
 * App piano input uses one lifecycle: `noteOn` at press and `noteOff` at release. It no longer schedules a fixed-duration note and then races that schedule against the physical release, which intermittently cut taps short or made repeated samples phase against one another. Re-articulating a held pitch releases its previous voice first, and a five-second safety release prevents a lost pointer/key-up event leaving a note stuck.
 * A percussive filter-enveloped synth voice remains as the fallback when the sample set cannot be loaded, so training is never silent.
-* App sound stays off by default for MIDI input, because a real keyboard already makes its own sound. The tone exists for the virtual piano and the computer keyboard.
+* App sound stays off by default for MIDI input during training, because a real keyboard already makes its own sound; Sheet Reading obeys the same saved MIDI-sound preference as the other trainers. Free Play is the exception: its purpose is to act as an instrument, so its own sound toggle starts on.
 * UI language is English for V1.
 * Adaptive selection weighs the player's whole history, not just the session in progress. A note needs three trials before its score outranks the default, which a short session never reaches on its own, so every session used to start knowing nothing. The accumulated per-note totals are scored by the same rule a session is scored by, and a session overrides its own history for a note only once it has seen that note enough times to disagree.
 * Only per-note medians survive between sessions, so the reference point for how slow a note is comes from the median of those rather than of every response ever given. That is enough to rank notes against each other, which is all the weighting does.
@@ -85,7 +87,7 @@ These decisions override older or broader statements elsewhere in this document 
 
 Build V1 as deployable vertical milestones: foundation and core logic, playable Reflex, MIDI/audio, Sheet Reading, Supabase persistence, adaptive training/dashboard, then production hardening. Each milestone must remain deployable to Vercel.
 
-### Current Implementation Status (Updated 2026-09-01)
+### Current Implementation Status (Updated 2026-09-03)
 
 Implemented in the repository:
 
@@ -97,6 +99,7 @@ Implemented in the repository:
 * Sheet Reading runs two, four, or five lines of four 4/4 measures — sixteen quarter notes each — but shows one line at a time, replacing it with the next once it is read. The notation scales up into whatever height is spare, bounded by the room a measure needs before its notes collide; four measures across a row is the real ceiling on how large it can draw. Compact landscape keeps its tuned size, having no spare height to give. A single system stays legible at full size rather than shrinking five onto a phone. Current-note highlighting, focus mode, and no advance on a wrong input all still apply, and the staff still scrolls when a narrow screen wraps one line onto several rows.
 * Responsive VexFlow 5 SVG notation that reflows sheet measures across rows on narrow screens, a piano-shaped Tone.js synth voice initialized by explicit user action, and a normalized input path.
 * Persistent navigation-level Web MIDI permission flow, device selection, connection state handling, Note On/Off parsing, velocity-zero Note Off, channel normalization, and reconnect-safe UI shared by every trainer.
+* Private Free Play mode for unscored virtual/computer/MIDI playing, including held notes, recent-note display, CC64 sustain pedal handling, sound and focus controls, and cleanup on navigation.
 * IndexedDB pending cloud-save queue without a guest-mode bypass.
 * Private Supabase email/password Auth, protected application routes, reproducible SQL migration, RLS, transactional session RPC, aggregate per-note statistics, and retry-safe session IDs.
 * Dashboard metrics, response-time trend, weakest notes, and a pitch heatmap that grows a cell for each sharp or flat once a key signature has put it in play.

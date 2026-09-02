@@ -11,8 +11,23 @@ describe("MIDI parser", () => {
     expect(parseMidiMessage([0x90, 60, 0], 1)?.kind).toBe("note-off");
   });
 
+  it("parses sustain pedal changes across channels at the MIDI midpoint", () => {
+    expect(parseMidiMessage([0xb3, 64, 63], 10)).toEqual({
+      kind: "sustain",
+      down: false,
+      channel: 3,
+      occurredAtMs: 10,
+    });
+    expect(parseMidiMessage([0xbf, 64, 64], 11)).toEqual({
+      kind: "sustain",
+      down: true,
+      channel: 15,
+      occurredAtMs: 11,
+    });
+  });
+
   it("ignores unrelated or malformed messages", () => {
-    expect(parseMidiMessage([0xb0, 64, 127], 1)).toBeNull();
+    expect(parseMidiMessage([0xb0, 65, 127], 1)).toBeNull();
     expect(parseMidiMessage([0x90, 60], 1)).toBeNull();
   });
 });

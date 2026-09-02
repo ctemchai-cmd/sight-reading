@@ -1,7 +1,7 @@
 "use client";
 
 import { Maximize2, Pause, Play, RotateCcw } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MusicStaff } from "@/components/music/MusicStaff";
 import { PianoKeyboard } from "@/components/music/PianoKeyboard";
 import { FocusSurface } from "@/components/training/FocusSurface";
@@ -19,6 +19,7 @@ import { useAudio } from "@/hooks/useAudio";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useMidi } from "@/hooks/useMidi";
+import { loadLocalPreferences } from "@/lib/preferences";
 import { persistTrainingSession } from "@/lib/sessionPersistence";
 import type { Clef, KeyName, Score, RangePreset } from "@/types/music";
 import type { MelodicShape, NoteInputEvent, TrainingSessionConfig, TrainingSessionRecord, TrainingSummary, TrainingTrial } from "@/types/training";
@@ -31,6 +32,9 @@ const LINE_CHOICES = [2, 4, 5] as const;
 
 export function SheetTrainer() {
   const [phase, setPhase] = useState<Phase>("configure");
+  // Sheet Reading used to test the input source instead of the setting, so the
+  // "App sound for MIDI" switch did nothing here while it worked everywhere else.
+  const [midiSoundEnabled, setMidiSoundEnabled] = useState(false);
   const phaseRef = useRef<Phase>("configure");
   const [rangePreset, setRangePreset] = useState<RangePreset>("ledger-1");
   const [lines, setLines] = useState<number>(4);
@@ -76,11 +80,11 @@ export function SheetTrainer() {
     sessionLength: totalNotes,
     adaptive: false,
     soundEnabled: true,
-    midiSoundEnabled: false,
+    midiSoundEnabled,
     computerKeyboardEnabled: true,
     nextNoteDelayMs: 0,
     tempoBpm: 0,
-  }), [clef, keySignature, melodicShape, range, rangePreset, totalNotes]);
+  }), [clef, keySignature, melodicShape, midiSoundEnabled, range, rangePreset, totalNotes]);
 
   const finish = useCallback(async (completedTrials: TrainingTrial[]) => {
     phaseRef.current = "complete";
@@ -103,8 +107,15 @@ export function SheetTrainer() {
     setSaveStatus(await persistTrainingSession(session));
   }, [config, setFocusMode]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setMidiSoundEnabled(loadLocalPreferences().midiSound), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const handleInput = (input: NoteInputEvent) => {
-    if (input.source !== "midi") engine.current?.playNote(input.midi, input.velocity ?? 96);
+    if (input.source !== "midi" || midiSoundEnabled) {
+      engine.current?.playNote(input.midi, input.velocity ?? 96);
+    }
     if (phaseRef.current !== "running" || !armedRef.current || !openTrialRef.current) return;
     const result = applyInputToTrial(openTrialRef.current, input);
     openTrialRef.current = result.trial;
