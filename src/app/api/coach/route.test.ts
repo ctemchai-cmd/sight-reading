@@ -66,6 +66,37 @@ describe("POST /api/coach", () => {
     expect((await POST(request({}))).status).toBe(400);
   });
 
+  // A retired model names its own replacement in Google's reply. Throwing that
+  // away and guessing sends someone to check the wrong thing.
+  it("passes Google's own explanation through instead of guessing", async () => {
+    getSupabaseServerClient.mockResolvedValue(clientWithClaims({ sub: "abc" }));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ error: { message: "This model is no longer available. Use models/gemini-3.6-flash." } }),
+      { status: 404 },
+    )));
+
+    const response = await POST(request());
+    expect(response.status).toBe(502);
+    expect((await response.json()).error).toContain("gemini-3.6-flash");
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to advice when the failure carries no explanation", async () => {
+    getSupabaseServerClient.mockResolvedValue(clientWithClaims({ sub: "abc" }));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>gateway</html>", { status: 500 })));
+
+    expect((await (await POST(request())).json()).error).toContain("GEMINI_MODEL");
+    vi.unstubAllGlobals();
+  });
+
+  it("reports a spent quota as its own condition", async () => {
+    getSupabaseServerClient.mockResolvedValue(clientWithClaims({ sub: "abc" }));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 429 })));
+
+    expect((await POST(request())).status).toBe(429);
+    vi.unstubAllGlobals();
+  });
+
   it("checks the session before it looks at the key, so an intruder learns nothing", async () => {
     vi.stubEnv("GEMINI_API_KEY", "");
     getSupabaseServerClient.mockResolvedValue(clientWithClaims(null));

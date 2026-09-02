@@ -7,7 +7,10 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { CoachSession } from "@/types/assistant";
 import type { WeakNoteStat } from "@/types/training";
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+// Google retires a model for new keys without retiring it from the model
+// listing, so a name that still appears in /models can answer 404 to every
+// call. Overridable with GEMINI_MODEL when this one is retired in turn.
+const DEFAULT_MODEL = "gemini-3.6-flash";
 const SESSION_COLUMNS = "mode,completed_at,completed_targets,accuracy,median_response_ms";
 /** Enough to show a trend; the whole history would only cost quota. */
 const SESSION_LIMIT = 30;
@@ -22,6 +25,17 @@ interface SessionRow {
 
 function fail(status: number, message: string): Response {
   return Response.json({ error: message }, { status });
+}
+
+/** Google's own explanation, which usually names the fix. */
+function upstreamMessage(body: string): string {
+  try {
+    const message = (JSON.parse(body) as { error?: { message?: string } }).error?.message;
+    if (message) return message;
+  } catch {
+    // Not the JSON error envelope; fall through to the generic advice.
+  }
+  return "Check GEMINI_API_KEY and GEMINI_MODEL.";
 }
 
 /**
@@ -85,10 +99,15 @@ export async function POST(request: Request): Promise<Response> {
   ).catch(() => null);
 
   if (!upstream?.ok || !upstream.body) {
-    const detail = upstream ? await upstream.text().catch(() => "") : "";
-    console.error("Gemini request failed", upstream?.status, detail);
-    if (upstream?.status === 429) return fail(429, "Gemini's free quota is spent for now. Try again later.");
-    return fail(502, "Gemini could not be reached. The key or the model name may be wrong.");
+    if (!upstream) return fail(502, "Gemini could not be reached at all. Check the network.");
+    const detail = await upstream.text().catch(() => "");
+    console.error("Gemini request failed", upstream.status, detail);
+    if (upstream.status === 429) return fail(429, "Gemini's free quota is spent for now. Try again later.");
+    // Google says exactly what is wrong — a retired model names its own
+    // replacement, a rejected key says so. Guessing "the key or the model may
+    // be wrong" in its place sends someone to check the wrong thing, which is
+    // the same mistake the dashboard's history errors were fixed for.
+    return fail(502, `Gemini refused the request (${upstream.status}). ${upstreamMessage(detail)}`);
   }
 
   const decode = createSseTextDecoder();
