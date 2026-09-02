@@ -2,7 +2,7 @@ import { weakNoteStatsFromTotals, type NoteTotals } from "@/core/training/scorin
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { WeakNoteStat } from "@/types/training";
 
-const COLUMNS =
+export const NOTE_STAT_COLUMNS =
   "midi,trial_count,first_try_correct_count,incorrect_attempt_count,average_response_ms,median_response_ms,best_response_ms";
 
 interface NoteStatRow {
@@ -27,6 +27,11 @@ function toTotals(row: NoteStatRow): NoteTotals {
   };
 }
 
+/** Shared with the server-side read, so both score the same rows the same way. */
+export function noteStatsFromRows(rows: unknown): WeakNoteStat[] {
+  return weakNoteStatsFromTotals(((rows ?? []) as NoteStatRow[]).map(toTotals));
+}
+
 export interface NoteHistory {
   stats: WeakNoteStat[];
   /** Why the history is empty, when it is empty for a reason worth showing. */
@@ -43,7 +48,7 @@ export interface NoteHistory {
 export async function loadNoteHistory(): Promise<NoteHistory> {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return { stats: [], error: null };
-  const { data, error } = await supabase.from("user_note_stats").select(COLUMNS);
+  const { data, error } = await supabase.from("user_note_stats").select(NOTE_STAT_COLUMNS);
   if (error) return { stats: [], error: error.message };
-  return { stats: weakNoteStatsFromTotals(((data ?? []) as unknown as NoteStatRow[]).map(toTotals)), error: null };
+  return { stats: noteStatsFromRows(data), error: null };
 }

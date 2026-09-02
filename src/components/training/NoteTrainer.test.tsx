@@ -10,6 +10,7 @@ interface StaffHarnessProps {
 }
 
 const trainingHarness = vi.hoisted(() => ({
+  searchParams: new URLSearchParams(),
   staffProps: null as StaffHarnessProps | null,
   midiNoteOn: null as ((event: {
     midi: number;
@@ -31,7 +32,7 @@ const engineRef = { current: audioEngine };
 // Rendered bare here, without the Suspense boundary the routes provide, so the
 // hook has no router to read from.
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => trainingHarness.searchParams,
 }));
 
 vi.mock("@/components/music/MusicStaff", () => ({
@@ -71,6 +72,7 @@ describe("NoteTrainer clock lifecycle", () => {
     vi.clearAllMocks();
     trainingHarness.staffProps = null;
     trainingHarness.midiNoteOn = null;
+    trainingHarness.searchParams = new URLSearchParams();
   });
 
   afterEach(() => {
@@ -284,5 +286,33 @@ describe("NoteTrainer clock lifecycle", () => {
     act(() => vi.advanceTimersByTime(600));
     expect(trainingHarness.staffProps?.beatCursorLeadIn).toBe(false);
     expect(trainingHarness.staffProps?.currentIndex).toBe(0);
+  });
+});
+
+describe("NoteTrainer session links", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    trainingHarness.searchParams = new URLSearchParams();
+  });
+
+  it("configures the session a coach or dashboard link asks for", () => {
+    trainingHarness.searchParams = new URLSearchParams("focus=53,57&clef=bass&key=F&shape=steps&length=25&tempo=72");
+    render(<NoteTrainer mode="reflex" />);
+
+    expect(screen.getByLabelText(/Clef/i)).toHaveValue("bass");
+    expect(screen.getByLabelText(/Key/i)).toHaveValue("F");
+    expect(screen.getByLabelText(/Melody/i)).toHaveValue("steps");
+    expect(screen.getByLabelText(/Session length/i)).toHaveValue("25");
+    expect(screen.getByText(/Drilling 2 pitches/i)).toBeInTheDocument();
+  });
+
+  // A typo quietly becoming C major would train the wrong thing in silence.
+  it("keeps its own defaults when a link names something invalid", () => {
+    trainingHarness.searchParams = new URLSearchParams("clef=alto&key=H&length=37");
+    render(<NoteTrainer mode="reflex" />);
+
+    expect(screen.getByLabelText(/Clef/i)).toHaveValue("treble");
+    expect(screen.getByLabelText(/Key/i)).toHaveValue("C");
+    expect(screen.getByLabelText(/Session length/i)).toHaveValue("71");
   });
 });

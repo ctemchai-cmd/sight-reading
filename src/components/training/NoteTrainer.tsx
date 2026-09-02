@@ -21,6 +21,7 @@ import {
   startsPerformanceLine,
 } from "@/core/training/performance";
 import { calculateWeakNoteStats, mergeNoteStats, summarizeTraining } from "@/core/training/scoring";
+import { SESSION_LENGTHS, TEMPO_CHOICES, parseSessionLink } from "@/core/training/sessionConfig";
 import { applyInputToTrial, createOpenTrial, missTrial, type OpenTrial } from "@/core/training/session";
 import { computerKeyboardGuide, useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useAudio } from "@/hooks/useAudio";
@@ -57,7 +58,6 @@ const STREAM_LOOKAHEAD = 8;
 const COUNT_IN_BEATS = 4;
 const PERFORMANCE_FEEDBACK_LIFETIME_MS = 820;
 const MAX_PERFORMANCE_FEEDBACKS = 16;
-const TEMPO_CHOICES = [40, 50, 60, 72, 84, 100, 120];
 const TIMING_GRADE_LABELS: Record<PerformanceTimingGrade, string> = {
   perfect: "Perfect",
   great: "Great",
@@ -104,14 +104,9 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const [phase, setPhase] = useState<Phase>("configure");
   const phaseRef = useRef<Phase>("configure");
   const searchParams = useSearchParams();
-  /** Pitches carried in from the dashboard's "practise these" link. */
-  const focusMidis = useMemo(() => {
-    const raw = searchParams.get("focus");
-    if (!raw) return [];
-    return [...new Set(raw.split(",").map(Number))]
-      .filter((midi) => Number.isInteger(midi) && midi >= 0 && midi <= 127)
-      .sort((a, b) => a - b);
-  }, [searchParams]);
+  /** A session carried in from the dashboard's "practise these" button or from the coach. */
+  const link = useMemo(() => parseSessionLink(searchParams), [searchParams]);
+  const focusMidis = link.focusMidis;
 
   // A focus link aims the session at the pitches it names: the range widens to
   // reach them and the key becomes the one spelling the most, or the generator
@@ -122,6 +117,9 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     ...(focusMidis.length
       ? { rangePreset: "custom" as const, minMidi: focusMidis[0], maxMidi: focusMidis[focusMidis.length - 1] }
       : {}),
+    ...(link.melodicShape ? { melodicShape: link.melodicShape } : {}),
+    ...(link.sessionLength ? { sessionLength: link.sessionLength } : {}),
+    ...(link.tempoBpm ? { tempoBpm: link.tempoBpm } : {}),
   }));
   const configRef = useRef(config);
   const [stream, setStream] = useState<TargetNote[]>([]);
@@ -142,8 +140,10 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saving");
   const [attemptCount, setAttemptCount] = useState(0);
   const { focusMode, setFocusMode, toggleFocusMode } = useFocusMode();
-  const [keyChoice, setKeyChoice] = useState<KeyName | "random">(() => keyCovering(focusMidis));
-  const [clefChoice, setClefChoice] = useState<Clef | "random">("treble");
+  // The clef and key are resolved at start rather than held in config, so a
+  // link has to seed them here to survive a random choice being offered.
+  const [keyChoice, setKeyChoice] = useState<KeyName | "random">(() => link.keySignature ?? keyCovering(focusMidis));
+  const [clefChoice, setClefChoice] = useState<Clef | "random">(() => link.clef ?? "treble");
   const label = mode === "flash" ? "Flash" : mode === "performance" ? "Performance" : "Reflex";
   const timed = mode === "performance";
   const [countIn, setCountIn] = useState(0);
@@ -734,7 +734,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
               }))}
               className="block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
             >
-              {[25, 50, 71, 100].map((length) => <option key={length} value={length}>{length} notes</option>)}
+              {SESSION_LENGTHS.map((length) => <option key={length} value={length}>{length} notes</option>)}
               <option value="endless">Endless</option>
             </select>
           </label>

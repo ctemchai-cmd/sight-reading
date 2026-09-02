@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, Home, Music2, Settings } from "lucide-react";
+import { BarChart3, Home, MessageCircle, Music2, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MidiMenu } from "@/components/midi/MidiMenu";
@@ -10,6 +10,7 @@ const links = [
   { href: "/", label: "Home", icon: Home },
   { href: "/train", label: "Train", icon: Music2 },
   { href: "/dashboard", label: "Progress", icon: BarChart3 },
+  { href: "/coach", label: "Coach", icon: MessageCircle },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -31,3 +31,17 @@ test("does not expose a public sign-up route", async ({ page }) => {
   const response = await page.goto("/signup");
   expect(response?.status()).toBe(404);
 });
+
+test("gates the coach page and refuses its API without a session", async ({ page, request }) => {
+  await page.goto("/coach");
+  await expect(page).toHaveURL(/\/login/);
+  expect(new URL(page.url()).searchParams.get("next")).toBe("/coach");
+
+  // The page redirects, but the API must refuse in its own voice: a redirect
+  // to /login is something fetch follows silently and reads back as HTML.
+  const response = await request.post("/api/coach", {
+    data: { messages: [{ role: "user", text: "what next?" }] },
+  });
+  expect(response.status()).toBe(401);
+  expect(response.headers()["content-type"]).toContain("application/json");
+});
