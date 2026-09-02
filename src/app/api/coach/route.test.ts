@@ -97,6 +97,36 @@ describe("POST /api/coach", () => {
     vi.unstubAllGlobals();
   });
 
+  // Gemini interleaves chunks with no text: usage metadata, a thought
+  // signature, the finish reason. Draining these through a pull-based stream
+  // stalled it forever on the first one — the reply stopped mid-sentence and
+  // the page waited on a completion that could never come.
+  it("streams to completion across chunks that carry no text", async () => {
+    getSupabaseServerClient.mockResolvedValue(clientWithClaims({ sub: "abc" }));
+    const encoder = new TextEncoder();
+    const event = (payload: unknown) => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(event({ candidates: [{ content: { parts: [{ text: "Practise " }] } }] }));
+          controller.enqueue(event({ usageMetadata: { promptTokenCount: 12 } }));
+          controller.enqueue(event({ candidates: [{ content: { parts: [{ thoughtSignature: "abc" }] } }] }));
+          controller.enqueue(event({ candidates: [{ content: { parts: [{ text: "F4." }] } }] }));
+          controller.close();
+        },
+      }),
+      { status: 200 },
+    )));
+
+    const response = await POST(request());
+    const body = await Promise.race([
+      response.text(),
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error("stream never closed")), 3000)),
+    ]);
+    expect(body).toBe("Practise F4.");
+    vi.unstubAllGlobals();
+  }, 10_000);
+
   it("checks the session before it looks at the key, so an intruder learns nothing", async () => {
     vi.stubEnv("GEMINI_API_KEY", "");
     getSupabaseServerClient.mockResolvedValue(clientWithClaims(null));

@@ -113,24 +113,22 @@ export async function POST(request: Request): Promise<Response> {
   const decode = createSseTextDecoder();
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
-  const reader = upstream.body.getReader();
 
-  const stream = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      const { done, value } = await reader.read();
-      if (done) {
-        controller.close();
-        return;
-      }
-      const text = decode(decoder.decode(value, { stream: true }));
+  // A transform, not a ReadableStream with a pull: a pull that resolves
+  // without enqueuing is never called again, and Gemini interleaves chunks
+  // that carry no text at all — usage metadata, a thought signature, the
+  // finish reason. The first of those stalled the response forever, which cut
+  // the reply off mid-sentence and left the page waiting on a reply that could
+  // never arrive. A transform is pushed to, so a turn that emits nothing is
+  // simply a turn that emits nothing.
+  const toPlainText = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      const text = decode(decoder.decode(chunk, { stream: true }));
       if (text) controller.enqueue(encoder.encode(text));
-    },
-    cancel() {
-      void reader.cancel();
     },
   });
 
-  return new Response(stream, {
+  return new Response(upstream.body.pipeThrough(toPlainText), {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-store",

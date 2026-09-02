@@ -5,6 +5,12 @@ import type { ChatMessage } from "@/types/assistant";
 export const MAX_MESSAGE_CHARS = 2000;
 /** Turns of history sent back. Older ones cost quota without changing an answer. */
 export const MAX_TURNS = 20;
+/**
+ * The model thinks before it answers and those tokens come out of this budget:
+ * a measured reply spent 592 on thinking against 229 on the visible answer.
+ * Sized so a long answer to a hard question still has room after the thinking.
+ */
+export const MAX_OUTPUT_TOKENS = 3000;
 
 interface GeminiPart {
   text: string;
@@ -46,7 +52,7 @@ export function buildGeminiRequest(messages: ChatMessage[], practiceSummary: str
       role: message.role,
       parts: [{ text: message.text }],
     })),
-    generationConfig: { temperature: 0.7, maxOutputTokens: 1200 },
+    generationConfig: { temperature: 0.7, maxOutputTokens: MAX_OUTPUT_TOKENS },
   };
 }
 
