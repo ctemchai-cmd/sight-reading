@@ -10,6 +10,14 @@ import type { WeakNoteStat } from "@/types/training";
 // Google retires a model for new keys without retiring it from the model
 // listing, so a name that still appears in /models can answer 404 to every
 // call. Overridable with GEMINI_MODEL when this one is retired in turn.
+/**
+ * The model thinks before it answers, and a question about the whole history
+ * measured ten seconds to its first word and thirteen to its last. Vercel's
+ * default cap is shorter than that, so the reply would be cut off in the
+ * deployment while working locally.
+ */
+export const maxDuration = 60;
+
 const DEFAULT_MODEL = "gemini-3.6-flash";
 const SESSION_COLUMNS = "mode,completed_at,completed_targets,accuracy,median_response_ms";
 /** Enough to show a trend; the whole history would only cost quota. */

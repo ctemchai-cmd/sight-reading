@@ -10,6 +10,11 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/assistant";
 
+/** Nothing arrives for the first several seconds while the model thinks. */
+const THINKING_NOTICE_MS = 4000;
+/** Long enough for a hard question, short enough that a dead request says so. */
+const REQUEST_TIMEOUT_MS = 90_000;
+
 const OPENERS = [
   "What should I practise next?",
   "Am I actually improving?",
@@ -53,8 +58,18 @@ export function CoachChat() {
   const [draft, setDraft] = useState("");
   const [partial, setPartial] = useState("");
   const [busy, setBusy] = useState(false);
+  const [waitedMs, setWaitedMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // A measured reply spent ten seconds thinking before its first word. Without
+  // a clock running, silence that long reads as a page that has given up.
+  useEffect(() => {
+    if (!busy) return;
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => setWaitedMs(Date.now() - startedAt), 500);
+    return () => window.clearInterval(timer);
+  }, [busy]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -69,6 +84,7 @@ export function CoachChat() {
     setDraft("");
     setError(null);
     setPartial("");
+    setWaitedMs(0);
     setBusy(true);
 
     try {
@@ -76,6 +92,7 @@ export function CoachChat() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
 
       if (!response.ok || !response.body) {
@@ -96,8 +113,12 @@ export function CoachChat() {
 
       if (reply.trim()) setMessages([...next, { role: "model", text: reply }]);
       else setError("The coach replied with nothing. Try asking again.");
-    } catch {
-      setError("The connection dropped before the reply finished.");
+    } catch (cause) {
+      setError(
+        cause instanceof DOMException && cause.name === "TimeoutError"
+          ? "The coach did not answer in time. Gemini's free tier is sometimes busy — try again."
+          : "The connection dropped before the reply finished.",
+      );
     } finally {
       setBusy(false);
       setPartial("");
@@ -149,8 +170,11 @@ export function CoachChat() {
             {partial ? (
               <MessageBody text={partial} />
             ) : (
-              <p className="flex items-center gap-2 text-sm text-slate-400">
-                <Sparkles className="size-4 animate-pulse text-teal-300" aria-hidden="true" /> Reading your history…
+              <p className="flex items-center gap-2 text-sm text-slate-400" aria-live="polite">
+                <Sparkles className="size-4 animate-pulse text-teal-300" aria-hidden="true" />
+                {waitedMs < THINKING_NOTICE_MS
+                  ? "Reading your history…"
+                  : `Thinking it over — ${Math.round(waitedMs / 1000)}s`}
               </p>
             )}
           </Card>
