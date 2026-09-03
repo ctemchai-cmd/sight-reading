@@ -13,8 +13,10 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      // The artwork sits inside the middle 80% a maskable icon is allowed to
+      // count on, and its background reaches every corner, so one file serves
+      // both purposes: a circular mask trims decoration, never the subject.
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-      { src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
     ],
   };
 }
