@@ -51,3 +51,25 @@ test("keeps Free Play behind private access", async ({ page }) => {
   await expect(page).toHaveURL(/\/login/);
   expect(new URL(page.url()).searchParams.get("next")).toBe("/play");
 });
+
+test("offers a link preview a chat app can render", async ({ page, request }) => {
+  await page.goto("/");
+  const content = (property: string) =>
+    page.locator(`meta[property="${property}"]`).getAttribute("content");
+
+  expect(await content("og:title")).toBeTruthy();
+  expect(await content("og:description")).toBeTruthy();
+  // Chat apps resolve nothing themselves: a relative image is dropped and the
+  // preview arrives as a bare link.
+  const image = await content("og:image");
+  expect(image).toMatch(/^https?:\/\/.+\/og\.png$/);
+  expect(await content("og:image:width")).toBe("1200");
+  expect(await content("og:image:height")).toBe("630");
+
+  // The crawler reads the landing page unauthenticated, so it must not redirect.
+  const landing = await request.get("/");
+  expect(landing.status()).toBe(200);
+  const preview = await request.get("/og.png");
+  expect(preview.status()).toBe(200);
+  expect(preview.headers()["content-type"]).toContain("image/png");
+});

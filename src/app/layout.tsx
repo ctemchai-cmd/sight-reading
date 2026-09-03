@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { AppNav } from "@/components/AppNav";
 import { Providers } from "@/components/Providers";
+import { siteUrl } from "@/lib/siteUrl";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,6 +17,29 @@ export const metadata: Metadata = {
     apple: "/icon-192.png",
   },
   appleWebApp: { capable: true, title: "Sight Reader", statusBarStyle: "black-translucent" },
+  // Chat apps read Open Graph and resolve nothing themselves, so the origin has
+  // to be stated for the image URL to survive as an absolute one.
+  metadataBase: new URL(siteUrl()),
+  openGraph: {
+    type: "website",
+    siteName: "Sight Reading Trainer",
+    title: "See the note. Play it without thinking.",
+    description: "Piano sight-reading practice with a real MIDI keyboard.",
+    url: "/",
+    images: [{
+      url: "/og.png",
+      width: 1200,
+      height: 630,
+      type: "image/png",
+      alt: "A treble clef beside the words: see the note, play it without thinking.",
+    }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "See the note. Play it without thinking.",
+    description: "Piano sight-reading practice with a real MIDI keyboard.",
+    images: ["/og.png"],
+  },
 };
 
 export const viewport: Viewport = {
