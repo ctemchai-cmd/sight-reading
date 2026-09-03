@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_VELOCITY } from "@/core/audio/velocity";
 import { PianoKeyboard } from "@/components/music/PianoKeyboard";
 
 describe("PianoKeyboard", () => {
@@ -11,7 +12,7 @@ describe("PianoKeyboard", () => {
     middleC.setPointerCapture = vi.fn();
     fireEvent.pointerDown(middleC, { pointerId: 1 });
     fireEvent.pointerUp(middleC, { pointerId: 1 });
-    expect(on).toHaveBeenCalledWith(60, 100);
+    expect(on).toHaveBeenCalledWith(60, DEFAULT_VELOCITY);
     expect(off).toHaveBeenCalledWith(60);
   });
 
@@ -24,7 +25,7 @@ describe("PianoKeyboard", () => {
       throw new DOMException("no such pointer", "NotFoundError");
     });
     fireEvent.pointerDown(key, { pointerId: 1 });
-    expect(on).toHaveBeenCalledWith(60, 100);
+    expect(on).toHaveBeenCalledWith(60, DEFAULT_VELOCITY);
   });
 
   it("releases both notes when two are struck before either renders", () => {
@@ -43,5 +44,24 @@ describe("PianoKeyboard", () => {
 
     expect(off).toHaveBeenCalledWith(60);
     expect(off).toHaveBeenCalledWith(64);
+  });
+
+  // jsdom has no layout and its pointer events carry no coordinates, so this
+  // covers only the fallback; velocityFromKeyPosition is tested on its own, and
+  // the real geometry is checked in a browser.
+  it("still sounds a note when the key geometry is unavailable", () => {
+    const on = vi.fn();
+    render(<PianoKeyboard trainingMinMidi={60} trainingMaxMidi={72} onNoteOn={on} onNoteOff={vi.fn()} />);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "C4" }), { pointerId: 1 });
+    expect(on).toHaveBeenCalledWith(60, DEFAULT_VELOCITY);
+  });
+
+  it("shows a note held from somewhere else, such as a MIDI keyboard", () => {
+    render(
+      <PianoKeyboard trainingMinMidi={60} trainingMaxMidi={72} heldMidis={[62]}
+        onNoteOn={vi.fn()} onNoteOff={vi.fn()} />,
+    );
+    expect(screen.getByRole("button", { name: "D4" }).className).toContain("bg-teal-200");
+    expect(screen.getByRole("button", { name: "E4" }).className).not.toContain("bg-teal-200");
   });
 });

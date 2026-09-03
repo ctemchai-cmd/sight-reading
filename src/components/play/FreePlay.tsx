@@ -6,11 +6,13 @@ import { PianoKeyboard } from "@/components/music/PianoKeyboard";
 import { FocusSurface } from "@/components/training/FocusSurface";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { SOUND_SETS, SOUND_SET_IDS, type SoundSetId } from "@/core/audio/soundSets";
 import { formatNoteName, midiToNotatedPitch } from "@/core/music/notes";
 import { useAudio } from "@/hooks/useAudio";
 import { computerKeyboardGuide, useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { useMidi } from "@/hooks/useMidi";
+import { loadLocalPreferences, saveLocalPreferences } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 import type { NoteInputEvent } from "@/types/training";
 
@@ -21,13 +23,17 @@ const OPENING_MIN_MIDI = 55;
 const OPENING_MAX_MIDI = 72;
 
 export function FreePlay() {
-  const { engine, error, initialize } = useAudio();
+  const { engine, error, initialize, changeSoundSet } = useAudio();
   const { focusMode, setFocusMode, toggleFocusMode } = useFocusMode();
   const [started, setStarted] = useState(false);
   const [starting, setStarting] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const [sustaining, setSustaining] = useState(false);
-  const [heldCount, setHeldCount] = useState(0);
+  // Every held pitch, not just how many: the board highlights what a MIDI
+  // keyboard is playing, which is the only way to see it from the screen.
+  const [held, setHeld] = useState<number[]>([]);
+  const [soundSetId, setSoundSetId] = useState<SoundSetId>("grand");
+  const [switching, setSwitching] = useState(false);
   const [recent, setRecent] = useState<number[]>([]);
   // What the input callbacks read lives on refs, so a re-render between a press
   // and its release cannot leave a note sounding — the trainers' rule.
@@ -38,18 +44,36 @@ export function FreePlay() {
 
   useEffect(() => () => setFocusMode(false), [setFocusMode]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSoundSetId(loadLocalPreferences().soundSet), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  async function chooseSoundSet(id: SoundSetId): Promise<void> {
+    setSwitching(true);
+    setSoundSetId(id);
+    saveLocalPreferences({ ...loadLocalPreferences(), soundSet: id });
+    try {
+      await changeSoundSet(id);
+    } finally {
+      heldRef.current.clear();
+      setHeld([]);
+      setSwitching(false);
+    }
+  }
+
   function noteOn(midi: number, velocity: number): void {
     if (!startedRef.current) return;
     if (soundOnRef.current) engine.current?.noteOn(midi, velocity);
     heldRef.current.add(midi);
-    setHeldCount(heldRef.current.size);
+    setHeld([...heldRef.current]);
     setRecent((current) => [midi, ...current].slice(0, RECENT_NOTES));
   }
 
   function noteOff(midi: number): void {
     if (startedRef.current && soundOnRef.current) engine.current?.noteOff(midi);
     heldRef.current.delete(midi);
-    setHeldCount(heldRef.current.size);
+    setHeld([...heldRef.current]);
   }
 
   function sustain(down: boolean): void {
@@ -90,6 +114,7 @@ export function FreePlay() {
     <PianoKeyboard
       trainingMinMidi={OPENING_MIN_MIDI}
       trainingMaxMidi={OPENING_MAX_MIDI}
+      heldMidis={held}
       onNoteOn={noteOn}
       onNoteOff={noteOff}
     />
@@ -148,7 +173,7 @@ export function FreePlay() {
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 <Card className="flex items-center justify-between p-4">
                   <span className="text-sm text-slate-400">
-                    Sustain pedal{heldCount > 0 ? ` · ${heldCount} held` : ""}
+                    Sustain pedal{held.length > 0 ? ` · ${held.length} held` : ""}
                   </span>
                   <span
                     aria-live="polite"
@@ -168,6 +193,23 @@ export function FreePlay() {
                       : recent.map((midi) => formatNoteName(midiToNotatedPitch(midi))).join("  ")}
                   </p>
                 </Card>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="text-sm text-slate-400">Instrument</span>
+                {SOUND_SET_IDS.map((id) => (
+                  <Button
+                    key={id}
+                    size="sm"
+                    variant={id === soundSetId ? "primary" : "secondary"}
+                    aria-pressed={id === soundSetId}
+                    disabled={switching}
+                    onClick={() => void chooseSoundSet(id)}
+                  >
+                    {SOUND_SETS[id].label}
+                  </Button>
+                ))}
+                <span className="text-xs text-slate-500">{SOUND_SETS[soundSetId].description}</span>
               </div>
 
               <div className="note-training-inputs mt-4">

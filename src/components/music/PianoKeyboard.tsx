@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { velocityFromKeyPosition } from "@/core/audio/velocity";
 import {
   STANDARD_KEYBOARD_RANGE,
   formatNoteName,
@@ -30,6 +31,8 @@ interface PianoKeyboardProps {
   trainingMinMidi: number;
   trainingMaxMidi: number;
   disabled?: boolean;
+  /** Notes sounding from elsewhere — a MIDI keyboard, or the computer keys. */
+  heldMidis?: readonly number[];
   onNoteOn: (midi: number, velocity: number) => void;
   onNoteOff: (midi: number) => void;
 }
@@ -38,6 +41,7 @@ export function PianoKeyboard({
   trainingMinMidi,
   trainingMaxMidi,
   disabled,
+  heldMidis,
   onNoteOn,
   onNoteOff,
 }: PianoKeyboardProps) {
@@ -54,6 +58,10 @@ export function PianoKeyboard({
     return { whiteKeys: all.filter(isNaturalMidi), blackKeys: all.filter((midi) => !isNaturalMidi(midi)) };
   }, []);
 
+  const sounding = useMemo(
+    () => new Set<number>([...pressed, ...(heldMidis ?? [])]),
+    [heldMidis, pressed],
+  );
   const keyWidth = Math.max(WHITE_KEY_MIN_PX, Math.round(viewportWidth / VISIBLE_WHITE_KEYS));
   const boardWidth = whiteKeys.length * keyWidth;
   const scrollable = viewportWidth > 0 && boardWidth > viewportWidth + 1;
@@ -100,7 +108,10 @@ export function PianoKeyboard({
     event.preventDefault();
     pressedRef.current = new Set(pressedRef.current).add(midi);
     setPressed(pressedRef.current);
-    onNoteOn(midi, 100);
+    // A touchscreen reports no force worth trusting, so the key is read like a
+    // real one: the further down it is struck, the more leverage, the louder.
+    const bounds = event.currentTarget.getBoundingClientRect();
+    onNoteOn(midi, velocityFromKeyPosition(event.clientY - bounds.top, bounds.height));
     // Capture keeps the release on this key when a finger slides off it, but a
     // pointer that has already gone makes it throw — and sounding the note
     // matters more than tidying up its release, so it goes first and this may
@@ -139,7 +150,7 @@ export function PianoKeyboard({
               style={{ minWidth: keyWidth }}
               className={cn(
                 "relative h-full flex-1 touch-none rounded-b-lg border border-slate-400 bg-slate-50 text-slate-500 shadow-inner transition-colors",
-                pressed.has(midi) && "bg-teal-200",
+                sounding.has(midi) && "bg-teal-200",
               )}
               onPointerDown={(event) => press(event, midi)}
               onPointerUp={(event) => release(event, midi)}
@@ -165,7 +176,7 @@ export function PianoKeyboard({
                 }}
                 className={cn(
                   "absolute top-0 z-10 h-[60%] -translate-x-1/2 touch-none rounded-b-md border border-black bg-slate-950 shadow-lg transition-colors",
-                  pressed.has(midi) && "bg-teal-600",
+                  sounding.has(midi) && "bg-teal-600",
                 )}
                 onPointerDown={(event) => press(event, midi)}
                 onPointerUp={(event) => release(event, midi)}

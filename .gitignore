@@ -22,3 +22,8 @@
 *.pem
 *.tsbuildinfo
 next-env.d.ts
+
+# Raw sample libraries. The sizes the application loads are cut into
+# public/audio/; the originals run to tens of megabytes and mostly consist of
+# score images that have nothing to do with the sound.
+/sound/

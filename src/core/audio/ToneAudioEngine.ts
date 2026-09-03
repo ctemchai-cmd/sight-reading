@@ -1,8 +1,8 @@
 import * as Tone from "tone";
 import type { AudioEngine } from "@/core/audio/AudioEngine";
+import { DEFAULT_SOUND_SET, soundSet, type SoundSetId } from "@/core/audio/soundSets";
+import { velocityToGain } from "@/core/audio/velocity";
 import { midiToNotatedPitch } from "@/core/music/notes";
-
-const SAMPLE_BASE_URL = "/audio/piano/";
 /**
  * One sample every minor third. Tone repitches the semitone either side, which
  * is inaudible for a reference tone and keeps the decoded buffers within a
@@ -59,11 +59,11 @@ function createSynth(): Tone.PolySynth<Tone.MonoSynth> {
   return synth;
 }
 
-function loadSampler(): Promise<Tone.Sampler> {
+function loadSampler(id: SoundSetId): Promise<Tone.Sampler> {
   return new Promise((resolve, reject) => {
     const sampler: Tone.Sampler = new Tone.Sampler({
       urls: sampleUrls(),
-      baseUrl: SAMPLE_BASE_URL,
+      baseUrl: soundSet(id).baseUrl,
       release: RELEASE_SECONDS,
       onload: () => resolve(sampler),
       onerror: reject,
@@ -87,6 +87,7 @@ type Instrument = Tone.Sampler | Tone.PolySynth<Tone.MonoSynth>;
 export class ToneAudioEngine implements AudioEngine {
   private instrument: Instrument | null = null;
   private loading: Promise<Instrument> | null = null;
+  private setId: SoundSetId = DEFAULT_SOUND_SET;
   private metronome: Tone.MembraneSynth | null = null;
   private heldNoteTimers = new Map<number, ReturnType<typeof setTimeout>>();
   private sustaining = false;
@@ -100,7 +101,26 @@ export class ToneAudioEngine implements AudioEngine {
    */
   preload(): void {
     // A missing or unreachable sample set should not silence training.
-    this.loading ??= loadSampler().catch(() => createSynth());
+    this.loading ??= loadSampler(this.setId).catch(() => createSynth());
+  }
+
+  get soundSetId(): SoundSetId {
+    return this.setId;
+  }
+
+  /**
+   * Swaps the sampled instrument. Anything sounding is stopped first: the old
+   * voices belong to buffers that are about to be disposed, and releasing them
+   * afterwards would reach for samples that are no longer there.
+   */
+  async setSoundSet(id: SoundSetId): Promise<void> {
+    if (id === this.setId && this.instrument) return;
+    this.setId = id;
+    this.stopAll();
+    const previous = this.instrument;
+    this.loading = loadSampler(id).catch(() => createSynth());
+    this.instrument = await this.loading;
+    if (previous && previous !== this.instrument) previous.dispose();
   }
 
   async initialize(): Promise<void> {
@@ -120,7 +140,7 @@ export class ToneAudioEngine implements AudioEngine {
   }
 
   private static gain(velocity: number): number {
-    return Math.max(0, Math.min(1, velocity / 127));
+    return velocityToGain(velocity);
   }
 
   private static note(midi: number): string {
