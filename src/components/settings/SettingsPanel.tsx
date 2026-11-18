@@ -1,12 +1,13 @@
 "use client";
 
+import { LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SOUND_SETS, SOUND_SET_IDS, isSoundSetId } from "@/core/audio/soundSets";
 import { defaultPreferences, loadLocalPreferences, saveLocalPreferences, type LocalPreferences } from "@/lib/preferences";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { logOut } from "@/lib/authActions";
 
 export function SettingsPanel() {
   const [preferences, setPreferences] = useState(defaultPreferences);
@@ -20,20 +21,8 @@ export function SettingsPanel() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const save = async () => {
+  const save = () => {
     saveLocalPreferences(preferences);
-    const supabase = getSupabaseBrowserClient();
-    const user = supabase ? (await supabase.auth.getUser()).data.user : null;
-    if (supabase && user) {
-      await supabase.from("user_preferences").upsert({
-        user_id: user.id,
-        default_session_length: preferences.defaultSessionLength,
-        adaptive_mode: preferences.adaptive,
-        sound_enabled: preferences.sound,
-        midi_sound_enabled: preferences.midiSound,
-        theme: theme ?? "system",
-      }, { onConflict: "user_id" });
-    }
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
   };
@@ -66,7 +55,11 @@ export function SettingsPanel() {
         {toggle("sound", "App sound", "Play the lightweight synth for virtual and computer-keyboard input.")}
         {toggle("midiSound", "App sound for MIDI", "Off by default to avoid doubling a real piano's sound.")}
         {toggle("computerKeyboard", "Computer keyboard input", "Use A–K as a one-octave fallback input.")}
-        <div className="flex items-center justify-end gap-3"><span className="text-sm text-teal-300" aria-live="polite">{saved ? "Saved" : ""}</span><Button className="w-full sm:w-auto" onClick={() => void save()}>Save settings</Button></div>
+        <div className="flex items-center justify-end gap-3"><span className="text-sm text-teal-300" aria-live="polite">{saved ? "Saved" : ""}</span><Button className="w-full sm:w-auto" onClick={save}>Save settings</Button></div>
+      </Card>
+      <Card className="mt-5 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <p className="text-sm leading-6 text-slate-400">Settings are kept on this device only. Changing the password signs out every device.</p>
+        <form action={logOut}><Button className="w-full sm:w-auto" type="submit" variant="secondary"><LogOut className="size-4" /> Log out</Button></form>
       </Card>
     </div>
   );

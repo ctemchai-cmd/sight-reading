@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeNoteStats, summarizeTraining, weakNoteStatsFromTotals } from "@/core/training/scoring";
+import { summarizeTraining } from "@/core/training/scoring";
 import type { PerformanceTimingGrade, TrainingTrial } from "@/types/training";
 
 function trial(midi: number, response: number, firstTryCorrect: boolean, timingGrade?: PerformanceTimingGrade): TrainingTrial {
@@ -46,30 +46,5 @@ describe("training scoring", () => {
       trial(62, 450, true, "cool"),
       trial(64, 900, false, "bad"),
     ]).timingGrades).toEqual({ perfect: 1, great: 0, cool: 1, bad: 1, miss: 0 });
-  });
-
-  it("scores accumulated totals so history can rank notes before a session starts", () => {
-    const totals = [
-      { midi: 60, trialCount: 20, firstTryCorrectCount: 20, incorrectAttemptCount: 0, averageResponseMs: 500, medianResponseMs: 500, bestResponseMs: 400 },
-      { midi: 77, trialCount: 20, firstTryCorrectCount: 8, incorrectAttemptCount: 15, averageResponseMs: 1600, medianResponseMs: 1500, bestResponseMs: 900 },
-    ];
-    const [weakest, strongest] = weakNoteStatsFromTotals(totals);
-    expect(weakest.midi).toBe(77);
-    expect(strongest.midi).toBe(60);
-    expect(weakest.weakScore).toBeGreaterThan(strongest.weakScore * 2);
-    expect(weakNoteStatsFromTotals([])).toEqual([]);
-  });
-
-  it("lets a session override its history only once it has seen the note enough", () => {
-    const history = weakNoteStatsFromTotals([
-      { midi: 60, trialCount: 40, firstTryCorrectCount: 12, incorrectAttemptCount: 30, averageResponseMs: 1800, medianResponseMs: 1800, bestResponseMs: 900 },
-    ]);
-    const nowFluent = { ...history[0], trialCount: 5, firstTryAccuracy: 1, weakScore: 0.8 };
-    const barelySeen = { ...history[0], trialCount: 1, firstTryAccuracy: 1, weakScore: 0.8 };
-
-    expect(mergeNoteStats(history, [nowFluent])[0].weakScore).toBe(0.8);
-    expect(mergeNoteStats(history, [barelySeen])[0].weakScore).toBe(history[0].weakScore);
-    // A note the history has never seen is taken on the session's word.
-    expect(mergeNoteStats(history, [{ ...barelySeen, midi: 64 }]).map((stat) => stat.midi).sort()).toEqual([60, 64]);
   });
 });

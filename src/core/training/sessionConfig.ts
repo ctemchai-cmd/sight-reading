@@ -25,8 +25,8 @@ function pick<T extends string>(raw: string | null, allowed: readonly T[]): T | 
 }
 
 /**
- * Reads a session out of a link's query string — the dashboard's weak-pitch
- * button and the coach's recommendations both arrive this way.
+ * Reads a session out of a link's query string — the coach's recommendations
+ * arrive this way.
  *
  * Anything unrecognised is dropped rather than defaulted. A link is written by
  * something outside the trainer, and a typo silently becoming C major would

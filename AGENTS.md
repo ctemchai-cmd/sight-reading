@@ -6,7 +6,8 @@ natively; Claude Code reads it through the one-line `@AGENTS.md` import in
 
 A web app that trains piano sight-reading reflexes: notation → recognition →
 physical response → accuracy → speed. Treble and bass clefs, major key
-signatures, private single-user deployment on Vercel.
+signatures, private single-user deployment on Vercel behind one fixed password.
+No practice history is stored anywhere.
 
 `docs/project_info.txt` is the product specification. Its
 "Current V1 Implementation Decisions" section overrides anything later in that
@@ -27,10 +28,10 @@ Both Codex and Claude Code are used on this repo, one at a time.
 ## Stack
 
 Next.js 16 App Router · React 19 · TypeScript strict · Tailwind CSS 4 ·
-VexFlow 5 · Tone.js · Web MIDI · Supabase (`@supabase/ssr`) · Vercel.
+VexFlow 5 · Tone.js · Web MIDI · Vercel.
 
-Do not add Redux, Zustand, Firebase, a separate backend, or an animation
-framework. Reach for a new dependency only when the alternative is materially
+Do not add Redux, Zustand, Firebase, a database, a separate backend, or an
+animation framework. Reach for a new dependency only when the alternative is materially
 worse, and say why in the commit message.
 
 ## Layering
@@ -43,7 +44,7 @@ Dependencies point downward only.
 | Core | `src/core/` | Pure TypeScript. **No React, no DOM, no browser globals.** Unit-tested. |
 | Adapters | `src/hooks/`, `src/core/audio/` | Bridge browser APIs to core. MIDI, computer keyboard, Tone.js. |
 | UI | `src/components/`, `src/app/` | Rendering and orchestration. Holds no music theory. |
-| Persistence | `src/lib/`, `src/core/persistence/` | Supabase and the IndexedDB retry queue. |
+| Server & storage | `src/lib/` | The password session (`auth.ts`, `authActions.ts`) and `localStorage` preferences. |
 
 Every input source — touch, computer keyboard, MIDI — normalizes to a
 `NoteInputEvent` and enters scoring through `applyInputToTrial`. Add input
@@ -51,7 +52,8 @@ devices at that boundary; never let a device type reach the trainers.
 
 ## Measurement contract
 
-These definitions are load-bearing; changing one invalidates stored history.
+These definitions are load-bearing: the session result, adaptive weighting, and
+the coach's knowledge all assume them.
 
 - **Accuracy** is first-attempt accuracy: first-try-correct trials ÷ completed trials.
 - **Mistakes** is the total count of incorrect note-on inputs.
@@ -100,19 +102,20 @@ this, so do not weaken those assertions to make a change pass.
 ## Traps
 
 - **`src/proxy.ts` is the middleware.** Next.js 16 renamed it. It gates
-  `/train`, `/dashboard`, and `/settings`, and fails closed when Supabase
-  config or a valid non-anonymous session is missing.
+  `/train`, `/play`, `/coach`, and `/settings`, and fails closed when
+  `APP_PASSWORD` is unset or the session cookie does not match it.
 - **This file's `nextjs-agent-rules` block is machine-managed.** `next dev`
   rewrites the region between its markers and preserves everything outside,
   so keep project content out of that block and commit the block when it
   changes rather than reverting it.
-- **No public sign-up exists.** Accounts are created by hand in the Supabase
-  dashboard. Do not add a `/signup` route; an e2e test asserts it 404s.
-- **`save_training_session` is idempotent** on a client-generated session id,
-  which is what makes the pending-queue retry safe. Preserve that if you touch
-  the RPC or the migration.
-- Only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-  are configured. There is no service-role key in this app.
+- **There are no accounts.** One password from `APP_PASSWORD` opens the app;
+  the cookie holds an HMAC of it, never the password. Do not add a `/signup`
+  route; an e2e test asserts it 404s. The e2e server runs with
+  `APP_PASSWORD=e2e-password` from `playwright.config.ts`.
+- **Nothing is recorded.** Do not reintroduce session saving, a stats store,
+  or a progress dashboard without the owner asking for it.
+- The configured variables are `APP_PASSWORD`, `GEMINI_API_KEY`, and the
+  optional `GEMINI_MODEL` and `NEXT_PUBLIC_SITE_URL`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

@@ -17,8 +17,8 @@ const REQUEST_TIMEOUT_MS = 90_000;
 
 const OPENERS = [
   "What should I practise next?",
-  "Am I actually improving?",
-  "Which notes are holding me back?",
+  "Which mode should I start with?",
+  "How long should a practice session be?",
   "How do I get faster at reading ledger lines?",
 ];
 
@@ -134,12 +134,11 @@ export function CoachChat() {
               <Sparkles className="size-4 text-teal-300" aria-hidden="true" /> Ask about your practice
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-400">
-              The coach can see your session history, your per-pitch times and your streak, and it knows how
-              this application&apos;s modes and settings work. Ask in any language.
+              The coach knows how this application&apos;s modes and settings work. Nothing you play is recorded,
+              so it cannot see your results — tell it your numbers when they matter. Ask in any language.
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Replies come from Google Gemini. Your questions and your training statistics are sent there;
-              your account details are not.
+              Replies come from Google Gemini, and your questions are sent there.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               {OPENERS.map((opener) => (
@@ -173,7 +172,7 @@ export function CoachChat() {
               <p className="flex items-center gap-2 text-sm text-slate-400" aria-live="polite">
                 <Sparkles className="size-4 animate-pulse text-teal-300" aria-hidden="true" />
                 {waitedMs < THINKING_NOTICE_MS
-                  ? "Reading your history…"
+                  ? "Thinking…"
                   : `Thinking it over — ${Math.round(waitedMs / 1000)}s`}
               </p>
             )}

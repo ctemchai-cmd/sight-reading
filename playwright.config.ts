@@ -10,6 +10,7 @@ export default defineConfig({
   webServer: {
     command: "npm run dev -- --port 3107",
     url: "http://127.0.0.1:3107",
+    env: { APP_PASSWORD: "e2e-password" },
     reuseExistingServer: !process.env.CI,
   },
   projects: [

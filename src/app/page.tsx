@@ -13,7 +13,7 @@ export default function HomePage() {
           <p className="home-copy mt-5 max-w-2xl text-base leading-7 text-slate-400 sm:mt-6 sm:text-lg sm:leading-8">Build the reflex that turns notation into a physical response. Train accuracy, reaction time, ledger lines, and continuous reading with a real MIDI keyboard.</p>
           <div className="home-actions mt-8 flex flex-col gap-3 sm:mt-9 sm:flex-row">
             <Link href="/train"><Button className="w-full sm:w-auto" size="lg">Start training <ArrowRight className="size-5" /></Button></Link>
-            <Link href="/dashboard"><Button className="w-full sm:w-auto" size="lg" variant="secondary">View progress</Button></Link>
+            <Link href="/play"><Button className="w-full sm:w-auto" size="lg" variant="secondary">Free play</Button></Link>
           </div>
           <p className="home-support-note mt-5 text-xs text-slate-500">Designed for current Chrome Desktop · USB MIDI recommended</p>
         </div>

@@ -1,64 +1,29 @@
-import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
+import { SESSION_COOKIE, isValidSession, safeNextPath } from "@/lib/auth";
 
 // The coach page is gated here; /api/coach gates itself, because a redirect to
 // /login is something fetch follows silently and hands back as 200 HTML.
-const protectedRoutePrefixes = ["/train", "/dashboard", "/settings", "/coach", "/play"];
+const protectedRoutePrefixes = ["/train", "/settings", "/coach", "/play"];
 
 function isProtectedPath(pathname: string): boolean {
   return protectedRoutePrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-function redirectWithCookies(url: URL, response: NextResponse): NextResponse {
-  const redirectResponse = NextResponse.redirect(url);
-  response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
-  return redirectResponse;
-}
+export function proxy(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+  const authenticated = isValidSession(request.cookies.get(SESSION_COOKIE)?.value);
 
-export async function proxy(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
-  const protectedPath = isProtectedPath(pathname);
-  const loginPath = pathname === "/login";
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) {
-    if (!protectedPath) return NextResponse.next({ request });
+  if (isProtectedPath(pathname) && !authenticated) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", "supabase-config");
-    loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
+    loginUrl.searchParams.set("next", `${pathname}${search}`);
     return NextResponse.redirect(loginUrl);
   }
 
-  let response = NextResponse.next({ request });
-  const supabase = createServerClient(url, key, {
-    cookies: {
-      getAll: () => request.cookies.getAll(),
-      setAll: (cookiesToSet) => {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-      },
-    },
-  });
-
-  const claimsResult = await supabase.auth.getClaims().catch(() => null);
-  const claims = claimsResult?.data?.claims;
-  const authenticated = Boolean(claims?.sub) && claims?.is_anonymous !== true;
-
-  if (protectedPath && !authenticated) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
-    return redirectWithCookies(loginUrl, response);
+  if (pathname === "/login" && authenticated) {
+    return NextResponse.redirect(new URL(safeNextPath(request.nextUrl.searchParams.get("next")), request.url));
   }
 
-  if (loginPath && authenticated) {
-    const requestedPath = request.nextUrl.searchParams.get("next");
-    const safePath = requestedPath?.startsWith("/") && !requestedPath.startsWith("//") ? requestedPath : "/train";
-    return redirectWithCookies(new URL(safePath, request.url), response);
-  }
-
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {

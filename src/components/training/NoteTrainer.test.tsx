@@ -61,8 +61,6 @@ vi.mock("@/hooks/useMidi", () => ({
     trainingHarness.midiNoteOn = onNoteOn;
   }),
 }));
-vi.mock("@/lib/noteStats", () => ({ loadNoteHistory: vi.fn(async () => ({ stats: [], error: null })) }));
-vi.mock("@/lib/sessionPersistence", () => ({ persistTrainingSession: vi.fn(async () => "synced") }));
 
 import { NoteTrainer } from "@/components/training/NoteTrainer";
 
@@ -295,7 +293,7 @@ describe("NoteTrainer session links", () => {
     trainingHarness.searchParams = new URLSearchParams();
   });
 
-  it("configures the session a coach or dashboard link asks for", () => {
+  it("configures the session a coach link asks for", () => {
     trainingHarness.searchParams = new URLSearchParams("focus=53,57&clef=bass&key=F&shape=steps&length=25&tempo=72");
     render(<NoteTrainer mode="reflex" />);
 

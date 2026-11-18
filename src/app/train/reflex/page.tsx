@@ -5,7 +5,7 @@ import { NoteTrainer } from "@/components/training/NoteTrainer";
 export const metadata: Metadata = { title: "Reflex Trainer" };
 
 export default function ReflexPage() {
-  // The trainer reads the dashboard's focus pitches from the query string.
+  // The trainer reads a coach link's focus pitches from the query string.
   return (
     <Suspense>
       <NoteTrainer mode="reflex" />

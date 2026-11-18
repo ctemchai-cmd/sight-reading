@@ -20,31 +20,26 @@ import {
   performancePageLastIndex,
   startsPerformanceLine,
 } from "@/core/training/performance";
-import { calculateWeakNoteStats, mergeNoteStats, summarizeTraining } from "@/core/training/scoring";
+import { calculateWeakNoteStats, summarizeTraining } from "@/core/training/scoring";
 import { SESSION_LENGTHS, TEMPO_CHOICES, parseSessionLink } from "@/core/training/sessionConfig";
 import { applyInputToTrial, createOpenTrial, missTrial, type OpenTrial } from "@/core/training/session";
 import { computerKeyboardGuide, useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useAudio } from "@/hooks/useAudio";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { useMidi } from "@/hooks/useMidi";
-import { loadNoteHistory } from "@/lib/noteStats";
-import { persistTrainingSession } from "@/lib/sessionPersistence";
 import { loadLocalPreferences } from "@/lib/preferences";
 import type { Clef, KeyName, TargetNote, RangePreset } from "@/types/music";
 import type {
   MelodicShape,
   NoteInputEvent,
   TrainingSessionConfig,
-  TrainingSessionRecord,
   TrainingSummary,
   TrainingTrial,
-  WeakNoteStat,
   PerformanceFeedbackEvent,
   PerformanceTimingGrade,
 } from "@/types/training";
 
 type Phase = "configure" | "running" | "paused" | "complete";
-type SaveStatus = "saving" | "pending" | "synced";
 interface PendingPerformanceTrial {
   noteIndex: number;
   open: OpenTrial;
@@ -104,7 +99,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const [phase, setPhase] = useState<Phase>("configure");
   const phaseRef = useRef<Phase>("configure");
   const searchParams = useSearchParams();
-  /** A session carried in from the dashboard's "practise these" button or from the coach. */
+  /** A session carried in from a coach recommendation. */
   const link = useMemo(() => parseSessionLink(searchParams), [searchParams]);
   const focusMidis = link.focusMidis;
 
@@ -128,8 +123,6 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const streamIndexRef = useRef(0);
   const [trials, setTrials] = useState<TrainingTrial[]>([]);
   const trialsRef = useRef<TrainingTrial[]>([]);
-  // What the player has been weak at across every past session.
-  const historyRef = useRef<WeakNoteStat[]>([]);
   const openTrialRef = useRef<OpenTrial | null>(null);
   const generatorRef = useRef<NoteGenerator | null>(null);
   const [feedback, setFeedback] = useState<"correct" | "incorrect" | null>(null);
@@ -137,7 +130,6 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const performanceFeedbackIdRef = useRef(0);
   const performanceFeedbackTimersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const [summary, setSummary] = useState<TrainingSummary | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("saving");
   const [attemptCount, setAttemptCount] = useState(0);
   const { focusMode, setFocusMode, toggleFocusMode } = useFocusMode();
   // The clef and key are resolved at start rather than held in config, so a
@@ -157,7 +149,6 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   const pageRestRef = useRef(false);
   const [pageRest, setPageRest] = useState(false);
   const pendingPerformanceTrialRef = useRef<PendingPerformanceTrial | null>(null);
-  const startedAtRef = useRef("");
   const armedRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { engine, error: audioError, initialize: initializeAudio } = useAudio();
@@ -187,16 +178,6 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   }, [config]);
 
   useEffect(() => {
-    let active = true;
-    void loadNoteHistory().then(({ stats }) => {
-      if (active) historyRef.current = stats;
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
     const timer = window.setTimeout(() => {
       const preferences = loadLocalPreferences();
       setConfig((current) => ({
@@ -211,7 +192,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const finishSession = useCallback(async (completedTrials: TrainingTrial[], reason: "target-reached" | "user-stopped") => {
+  const finishSession = useCallback((completedTrials: TrainingTrial[]) => {
     if (completedTrials.length === 0) return;
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
@@ -223,28 +204,13 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     armedRef.current = false;
     pendingPerformanceTrialRef.current = null;
     engine.current?.stopAll();
-    const nextSummary = summarizeTraining(completedTrials);
-    setSummary(nextSummary);
-    setSaveStatus("saving");
-    const session: TrainingSessionRecord = {
-      id: crypto.randomUUID(),
-      mode,
-      config: configRef.current,
-      startedAt: startedAtRef.current,
-      completedAt: new Date().toISOString(),
-      endReason: reason,
-      summary: nextSummary,
-      trials: completedTrials,
-      syncStatus: "local",
-    };
-    const status = await persistTrainingSession(session);
-    setSaveStatus(status);
-  }, [engine, mode, setFocusMode]);
+    setSummary(summarizeTraining(completedTrials));
+  }, [engine, setFocusMode]);
 
   const extendStream = useCallback((throughIndex: number) => {
     const generator = generatorRef.current;
     if (!generator) return;
-    const stats = mergeNoteStats(historyRef.current, calculateWeakNoteStats(trialsRef.current));
+    const stats = calculateWeakNoteStats(trialsRef.current);
     const next = [...streamRef.current];
     const sessionLength = configRef.current.sessionLength;
     const finiteLastIndex = sessionLength === "endless" ? Number.POSITIVE_INFINITY : sessionLength - 1;
@@ -352,7 +318,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
       const completed = closeBeat(scheduledAt);
       const target = configRef.current.sessionLength;
       if (target !== "endless" && completed.length >= target) {
-        void finishSession(completed, "target-reached");
+        finishSession(completed);
         return;
       }
       streamIndexRef.current += 1;
@@ -508,7 +474,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     setTrials(completedTrials);
     const targetCount = currentConfig.sessionLength;
     if (targetCount !== "endless" && completedTrials.length >= targetCount) {
-      void finishSession(completedTrials, "target-reached");
+      finishSession(completedTrials);
       return;
     }
     timeoutRef.current = setTimeout(advanceStream, currentConfig.nextNoteDelayMs);
@@ -557,7 +523,6 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
     streamRef.current = [];
     streamIndexRef.current = 0;
     setStreamIndex(0);
-    startedAtRef.current = new Date().toISOString();
     phaseRef.current = "running";
     setPhase("running");
     extendStream(0);
@@ -759,7 +724,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
   }
 
   if (phase === "complete" && summary) {
-    return <div className="px-4 py-8 sm:px-6 sm:py-10"><SessionResult summary={summary} syncStatus={saveStatus} onRetry={() => { phaseRef.current = "configure"; setPhase("configure"); }} onPracticeWeak={() => void startSession(summary.weakNotes.slice(0, 5).map((note) => note.midi))} /></div>;
+    return <div className="px-4 py-8 sm:px-6 sm:py-10"><SessionResult summary={summary} onRetry={() => { phaseRef.current = "configure"; setPhase("configure"); }} onPracticeWeak={() => void startSession(summary.weakNotes.slice(0, 5).map((note) => note.midi))} /></div>;
   }
 
   return (
@@ -799,7 +764,7 @@ export function NoteTrainer({ mode }: NoteTrainerProps) {
           <Button size="sm" variant="ghost" onClick={toggleFocusMode}><Maximize2 className="size-4" /> Focus</Button>
           {phase === "paused" ? <Button size="sm" onClick={resume}><Play className="size-4" /> Resume</Button> : <Button size="sm" variant="secondary" onClick={pause}><Pause className="size-4" /> Pause</Button>}
           <Button size="sm" variant="ghost" onClick={() => void startSession()}><RotateCcw className="size-4" /> Reset</Button>
-          {config.sessionLength === "endless" && <Button size="sm" variant="danger" onClick={() => void finishSession(trialsRef.current, "user-stopped")}><Square className="size-4" /> Finish</Button>}
+          {config.sessionLength === "endless" && <Button size="sm" variant="danger" onClick={() => finishSession(trialsRef.current)}><Square className="size-4" /> Finish</Button>}
         </div>
       </div>
       )}

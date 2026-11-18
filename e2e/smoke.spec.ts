@@ -19,12 +19,29 @@ test("requires private access before opening training", async ({ page }, testInf
   await expect(page).toHaveURL(/\/login/);
   expect(new URL(page.url()).searchParams.get("next")).toBe("/train");
   await expect(page.getByRole("heading", { name: /Private access/i })).toBeVisible();
-  await expect(page.getByText(/Supabase is not configured/i)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Log in/i })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Log in/i })).toBeEnabled();
   await expectNoHorizontalOverflow(page);
   if (testInfo.project.name === "mobile-landscape") {
     expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(1);
   }
+});
+
+test("opens with the fixed password and signs out again", async ({ page }) => {
+  await page.goto("/login?next=%2Fsettings");
+  await page.getByLabel("Password").fill("not-the-password");
+  await page.getByRole("button", { name: /Log in/i }).click();
+  await expect(page.getByText(/password is not right/i)).toBeVisible();
+  await expect(page).toHaveURL(/\/login/);
+
+  await page.getByLabel("Password").fill("e2e-password");
+  await page.getByRole("button", { name: /Log in/i }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expectNoHorizontalOverflow(page);
+
+  await page.getByRole("button", { name: /Log out/i }).click();
+  await expect(page).toHaveURL(/\/login/);
+  await page.goto("/train");
+  await expect(page).toHaveURL(/\/login/);
 });
 
 test("does not expose a public sign-up route", async ({ page }) => {

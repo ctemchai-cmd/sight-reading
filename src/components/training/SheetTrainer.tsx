@@ -20,9 +20,8 @@ import { useFocusMode } from "@/hooks/useFocusMode";
 import { useComputerKeyboard } from "@/hooks/useComputerKeyboard";
 import { useMidi } from "@/hooks/useMidi";
 import { loadLocalPreferences } from "@/lib/preferences";
-import { persistTrainingSession } from "@/lib/sessionPersistence";
 import type { Clef, KeyName, Score, RangePreset } from "@/types/music";
-import type { MelodicShape, NoteInputEvent, TrainingSessionConfig, TrainingSessionRecord, TrainingSummary, TrainingTrial } from "@/types/training";
+import type { MelodicShape, NoteInputEvent, TrainingSummary, TrainingTrial } from "@/types/training";
 
 type Phase = "configure" | "running" | "paused" | "complete";
 
@@ -52,8 +51,6 @@ export function SheetTrainer() {
   const [feedback, setFeedback] = useState<"correct" | "incorrect" | null>(null);
   const [summary, setSummary] = useState<TrainingSummary | null>(null);
   const [armNonce, setArmNonce] = useState(0);
-  const [saveStatus, setSaveStatus] = useState<"saving" | "pending" | "synced">("saving");
-  const startedAtRef = useRef("");
   const armedRef = useRef(false);
   const { engine, initialize: initializeAudio, error: audioError } = useAudio();
   const { focusMode, setFocusMode, toggleFocusMode } = useFocusMode();
@@ -70,42 +67,12 @@ export function SheetTrainer() {
   const lineStart = Math.floor(currentIndex / NOTES_PER_LINE) * NOTES_PER_LINE;
   const lineNotes = useMemo(() => notes.slice(lineStart, lineStart + NOTES_PER_LINE), [lineStart, notes]);
 
-  const config = useCallback((): TrainingSessionConfig => ({
-    mode: "sheet",
-    clef,
-    keySignature,
-    melodicShape,
-    rangePreset,
-    ...range,
-    sessionLength: totalNotes,
-    adaptive: false,
-    soundEnabled: true,
-    midiSoundEnabled,
-    computerKeyboardEnabled: true,
-    nextNoteDelayMs: 0,
-    tempoBpm: 0,
-  }), [clef, keySignature, melodicShape, midiSoundEnabled, range, rangePreset, totalNotes]);
-
-  const finish = useCallback(async (completedTrials: TrainingTrial[]) => {
+  const finish = useCallback((completedTrials: TrainingTrial[]) => {
     phaseRef.current = "complete";
     setPhase("complete");
     setFocusMode(false);
-    const nextSummary = summarizeTraining(completedTrials);
-    setSummary(nextSummary);
-    setSaveStatus("saving");
-    const session: TrainingSessionRecord = {
-      id: crypto.randomUUID(),
-      mode: "sheet",
-      config: config(),
-      startedAt: startedAtRef.current,
-      completedAt: new Date().toISOString(),
-      endReason: "target-reached",
-      summary: nextSummary,
-      trials: completedTrials,
-      syncStatus: "local",
-    };
-    setSaveStatus(await persistTrainingSession(session));
-  }, [config, setFocusMode]);
+    setSummary(summarizeTraining(completedTrials));
+  }, [setFocusMode]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setMidiSoundEnabled(loadLocalPreferences().midiSound), 0);
@@ -129,7 +96,7 @@ export function SheetTrainer() {
     armedRef.current = false;
     setFeedback("correct");
     if (indexRef.current >= totalNotes - 1) {
-      void finish(completed);
+      finish(completed);
       return;
     }
     indexRef.current += 1;
@@ -159,7 +126,6 @@ export function SheetTrainer() {
     setArmNonce(0);
     openTrialRef.current = null;
     armedRef.current = false;
-    startedAtRef.current = new Date().toISOString();
     phaseRef.current = "running";
     setPhase("running");
   };
@@ -229,7 +195,7 @@ export function SheetTrainer() {
   }
 
   if (phase === "complete" && summary) {
-    return <div className="px-4 py-8 sm:px-6 sm:py-10"><SessionResult summary={summary} syncStatus={saveStatus} onRetry={() => { phaseRef.current = "configure"; setPhase("configure"); }} /></div>;
+    return <div className="px-4 py-8 sm:px-6 sm:py-10"><SessionResult summary={summary} onRetry={() => { phaseRef.current = "configure"; setPhase("configure"); }} /></div>;
   }
 
   return (

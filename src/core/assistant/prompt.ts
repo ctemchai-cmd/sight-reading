@@ -22,16 +22,8 @@ export interface GeminiRequest {
   generationConfig: { temperature: number; maxOutputTokens: number };
 }
 
-export function buildSystemInstruction(practiceSummary: string): string {
-  return [
-    COACH_INSTRUCTIONS,
-    "",
-    APP_KNOWLEDGE,
-    "",
-    "# This player's practice",
-    "",
-    practiceSummary,
-  ].join("\n");
+export function buildSystemInstruction(): string {
+  return [COACH_INSTRUCTIONS, "", APP_KNOWLEDGE].join("\n");
 }
 
 /**
@@ -45,9 +37,9 @@ export function trimHistory(messages: ChatMessage[], maxTurns = MAX_TURNS): Chat
   return firstUser <= 0 ? recent : recent.slice(firstUser);
 }
 
-export function buildGeminiRequest(messages: ChatMessage[], practiceSummary: string): GeminiRequest {
+export function buildGeminiRequest(messages: ChatMessage[]): GeminiRequest {
   return {
-    systemInstruction: { parts: [{ text: buildSystemInstruction(practiceSummary) }] },
+    systemInstruction: { parts: [{ text: buildSystemInstruction() }] },
     contents: trimHistory(messages).map((message) => ({
       role: message.role,
       parts: [{ text: message.text }],

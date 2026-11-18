@@ -2,7 +2,6 @@ import type { Clef, KeyName, MidiNumber, TargetNote, RangePreset } from "@/types
 
 export type InputSource = "touch" | "computer-keyboard" | "midi";
 export type TrainingMode = "reflex" | "flash" | "performance" | "sheet";
-export type SessionEndReason = "target-reached" | "user-stopped";
 export type PerformanceTimingGrade = "perfect" | "great" | "cool" | "bad" | "miss";
 export type PerformanceFeedbackKind = PerformanceTimingGrade | "wrong";
 
@@ -92,16 +91,4 @@ export interface TrainingSessionConfig {
   midiSoundEnabled: boolean;
   computerKeyboardEnabled: boolean;
   nextNoteDelayMs: number;
-}
-
-export interface TrainingSessionRecord {
-  id: string;
-  mode: TrainingMode;
-  config: TrainingSessionConfig;
-  startedAt: string;
-  completedAt: string;
-  endReason: SessionEndReason;
-  summary: TrainingSummary;
-  trials: TrainingTrial[];
-  syncStatus: "local" | "pending" | "synced";
 }

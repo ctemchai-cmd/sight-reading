@@ -11,7 +11,7 @@ import {
 import type { ChatMessage } from "@/types/assistant";
 
 describe("app knowledge", () => {
-  // The coach quoting a threshold the dashboard has moved away from is worse
+  // The coach quoting a threshold the application has moved away from is worse
   // than no coach, so the numbers must come from the constants themselves.
   it("quotes the thresholds the application actually uses", () => {
     expect(APP_KNOWLEDGE).toContain(String(FLUENT_RESPONSE_MS));
@@ -44,10 +44,16 @@ describe("request building", () => {
     expect(trimmed.at(-1)?.text).toBe("turn 29");
   });
 
-  it("puts the practice summary in the system instruction, not the conversation", () => {
-    const request = buildGeminiRequest([{ role: "user", text: "what next?" }], "MEDIAN 1.2s");
-    expect(request.systemInstruction.parts[0].text).toContain("MEDIAN 1.2s");
+  it("puts the application knowledge in the system instruction, not the conversation", () => {
+    const request = buildGeminiRequest([{ role: "user", text: "what next?" }]);
+    expect(request.systemInstruction.parts[0].text).toContain(APP_KNOWLEDGE);
     expect(request.contents).toEqual([{ role: "user", parts: [{ text: "what next?" }] }]);
+  });
+
+  // Nothing is recorded, so a coach told otherwise would invent a history.
+  it("tells the coach it cannot see the player's results", () => {
+    expect(buildGeminiRequest([{ role: "user", text: "am I improving?" }]).systemInstruction.parts[0].text)
+      .toMatch(/keeps no practice history/i);
   });
 });
 
